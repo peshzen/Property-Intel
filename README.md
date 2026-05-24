@@ -52,3 +52,17 @@ Each file has TODO markers for connecting official/paid APIs via backend functio
 
 ## Notes
 This MVP intentionally works without third-party paid keys by falling back to safe mock data so the app remains functional in development and demos.
+
+## Google Maps user key integration
+- Users can save/test/remove their own Google Maps API key from **Profile & Settings → Google Maps Integration**.
+- Keys are stored server-side in `profiles.google_maps_api_key_encrypted` and never returned in full to the frontend after save.
+- Configure `GOOGLE_API_KEY_ENCRYPTION_SECRET` in Netlify for AES-256-GCM encryption at rest.
+- Report generation key priority:
+  1. User's saved key
+  2. Global `GOOGLE_MAPS_API_KEY`
+  3. Graceful fallback that skips Google-dependent features
+- Users should enable these Google APIs in their Google Cloud project:
+  - Maps JavaScript API
+  - Geocoding API
+  - Street View Static API
+  - Places API (if autocomplete is used)
