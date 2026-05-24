@@ -1,4 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import type { HandlerEvent } from '@netlify/functions';
+import { createClient } from '@supabase/supabase-js';
 
 const IV_LENGTH = 12;
 
@@ -34,6 +36,41 @@ export function decryptGoogleMapsKey(payload?: string | null, secret?: string): 
   decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
   const decrypted = Buffer.concat([decipher.update(Buffer.from(dataB64, 'base64')), decipher.final()]);
   return decrypted.toString('utf8');
+}
+
+export function mapGoogleStatusToMessage(status: string): string {
+  const hints: Record<string, string> = {
+    REQUEST_DENIED: 'Google denied the request. Check billing, enabled APIs, API restrictions, and allowed referrers/IPs.',
+    OVER_QUERY_LIMIT: 'Google quota exceeded. Check daily limits and billing status.',
+    INVALID_REQUEST: 'Google rejected the request as invalid. Verify request parameters and API setup.',
+    ZERO_RESULTS: 'Google did not find results for the provided address/location.',
+  };
+  return hints[status] ?? `Google Maps request failed with status: ${status}.`;
+}
+
+export async function getAuthenticatedClients(event: HandlerEvent) {
+  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !anonKey || !serviceKey) throw new Error('Missing Supabase environment variables.');
+
+  const authHeader = event.headers.authorization || event.headers.Authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) throw new Error('Missing bearer token.');
+
+  const authedClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } } });
+  const serviceClient = createClient(supabaseUrl, serviceKey);
+  const { data: authData, error: authError } = await authedClient.auth.getUser();
+  if (authError || !authData.user) throw new Error('Invalid auth token.');
+
+  return { serviceClient, userId: authData.user.id };
+}
+
+export async function resolveGoogleMapsKeyForUser(serviceClient: ReturnType<typeof createClient>, userId: string) {
+  const { data, error } = await serviceClient.from('profiles').select('google_maps_api_key_encrypted').eq('id', userId).maybeSingle();
+  if (error) throw new Error(error.message);
+  const userKey = decryptGoogleMapsKey(data?.google_maps_api_key_encrypted, process.env.GOOGLE_API_KEY_ENCRYPTION_SECRET);
+  return { key: userKey || process.env.GOOGLE_MAPS_API_KEY || null, hasSavedKey: Boolean(userKey) };
 }
 
 export type { KeyStatus };

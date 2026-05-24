@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { loadProfile, updateProfile } from '../lib/db';
-import { supabase } from '../lib/supabase';
 import type { Profile } from '../types';
+import { callAuthedFunction } from '../services/netlifyClient';
 
 type KeyStatus = 'not_connected' | 'connected' | 'connection_failed';
 
@@ -27,33 +27,21 @@ export function SettingsPage(){
   const [loadingTestKey, setLoadingTestKey] = useState(false);
   const [loadingDeleteKey, setLoadingDeleteKey] = useState(false);
   const [message, setMessage] = useState('');
+  const [debug, setDebug] = useState<any>(null);
 
   useEffect(()=>{loadProfile().then((p: Profile | null)=>{if(p){setFullName(p.full_name ?? ''); setCompany(p.company ?? ''); setKeyStatus((p.google_maps_api_key_status as KeyStatus) ?? 'not_connected'); setMaskedKey(p.google_maps_api_key_encrypted ? 'Saved key on file' : '');}}).catch(()=>setMessage('Failed to load settings.'));},[]);
   const save = async ()=>{ await updateProfile({ full_name: fullName, company }); setMessage('Profile saved successfully.'); };
 
-  const getAuthHeader = async () => {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) throw new Error('Not authenticated.');
-    return { Authorization: `Bearer ${token}` };
-  };
+  useEffect(() => {
+    callAuthedFunction<any>('google-maps-debug').then(setDebug).catch(() => setDebug(null));
+  }, []);
 
-  const callFunction = async (name: string, body?: Record<string, unknown>) => {
-    const res = await fetch(`/.netlify/functions/${name}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(await getAuthHeader()) },
-      body: JSON.stringify(body ?? {}),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? 'Request failed');
-    return data;
-  };
 
   const saveApiKey = async () => {
     if (!apiKeyInput.trim()) { setMessage('Please enter a Google Maps API key.'); return; }
     setLoadingSaveKey(true);
     try {
-      const data = await callFunction('save-google-maps-key', { apiKey: apiKeyInput.trim() });
+      const data = await callAuthedFunction<{ maskedKey?: string; status?: KeyStatus }>('save-google-maps-key', { apiKey: apiKeyInput.trim() });
       setMaskedKey(data.maskedKey ?? 'Saved');
       setKeyStatus(data.status ?? 'not_connected');
       setApiKeyInput('');
@@ -64,18 +52,20 @@ export function SettingsPage(){
   const testApiKey = async () => {
     setLoadingTestKey(true);
     try {
-      const data = await callFunction('test-google-maps-key');
+      const data = await callAuthedFunction<{ ok: boolean; status: KeyStatus; maskedKey?: string; googleStatus?: string; error?: string }>('test-google-maps-key');
       setKeyStatus(data.status ?? 'connection_failed');
       setMaskedKey(data.maskedKey ?? maskedKey);
-      setMessage(data.ok ? 'Google Maps connected successfully' : 'Google Maps connection failed. Check your key and enabled APIs.');
-    } catch { setMessage('Google Maps connection failed. Check your key and enabled APIs.'); } finally { setLoadingTestKey(false); }
+      setMessage(data.ok
+        ? `Google Maps connected successfully (${data.googleStatus ?? 'OK'}).`
+        : `${data.error ?? 'Connection failed.'} (${data.googleStatus ?? 'UNKNOWN_ERROR'})`);
+    } catch { setMessage('Connection failed. Check billing, enabled APIs, API restrictions, and allowed referrers/IPs.'); } finally { setLoadingTestKey(false); }
   };
 
   const deleteApiKey = async () => {
     if (!confirm('Remove your saved Google Maps API key?')) return;
     setLoadingDeleteKey(true);
     try {
-      await callFunction('delete-google-maps-key');
+      await callAuthedFunction('delete-google-maps-key');
       setApiKeyInput('');
       setMaskedKey('');
       setKeyStatus('not_connected');
@@ -101,5 +91,16 @@ export function SettingsPage(){
       <button disabled={loadingDeleteKey || loadingSaveKey || loadingTestKey} className='px-4 py-2 border border-red-300 text-red-700 rounded disabled:opacity-60' onClick={deleteApiKey}>{loadingDeleteKey ? 'Removing...' : 'Remove API Key'}</button>
     </div>
     {message && <p className='text-sm'>{message}</p>}
-  </div></div>;
+    {keyStatus !== 'not_connected' && <p className='text-xs text-slate-500'>Connection failed. Check billing, enabled APIs, API restrictions, and allowed referrers/IPs.</p>}
+  </div>
+  {debug?.isAdmin && <div className='card p-4 space-y-1 text-xs'>
+    <h3 className='font-semibold text-sm'>Google Maps Diagnostics (Admin)</h3>
+    <p>Global key configured: {debug.globalKeyConfigured ? 'yes' : 'no'}</p>
+    <p>Saved user key exists: {debug.savedUserKeyExists ? 'yes' : 'no'}</p>
+    <p>Last status: {debug.lastStatus ?? 'unknown'}</p>
+    <p>Last tested: {debug.lastTestedAt ?? 'never'}</p>
+    <p>Geocode test: {debug.geocodeTest ?? 'not_run'}</p>
+    <p>Street View test: {debug.streetViewTest ?? 'not_run'}</p>
+  </div>}
+</div>;
 }
