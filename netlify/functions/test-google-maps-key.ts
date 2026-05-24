@@ -1,37 +1,29 @@
 import type { Handler } from '@netlify/functions';
-import { createClient } from '@supabase/supabase-js';
-import { decryptGoogleMapsKey, maskGoogleMapsKey, type KeyStatus } from './_googleMapsKey';
+import { getAuthenticatedClients, mapGoogleStatusToMessage, maskGoogleMapsKey, resolveGoogleMapsKeyForUser, type KeyStatus } from './_googleMapsKey';
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' };
-  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !anonKey || !serviceKey) return { statusCode: 500, body: JSON.stringify({ error: 'Missing Supabase environment variables.' }) };
 
-  const authHeader = event.headers.authorization || event.headers.Authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (!token) return { statusCode: 401, body: JSON.stringify({ error: 'Missing bearer token.' }) };
+  try {
+    const { serviceClient, userId } = await getAuthenticatedClients(event);
+    const { key, hasSavedKey } = await resolveGoogleMapsKeyForUser(serviceClient, userId);
+    if (!key) return { statusCode: 400, body: JSON.stringify({ ok: false, status: 'connection_failed', error: 'No Google Maps API key saved and no GOOGLE_MAPS_API_KEY fallback configured.' }) };
 
-  const authedClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } } });
-  const serviceClient = createClient(supabaseUrl, serviceKey);
+    const testUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent('1600 Amphitheatre Parkway, Mountain View, CA')}&key=${encodeURIComponent(key)}`;
+    const response = await fetch(testUrl);
+    const data = await response.json() as { status?: string; error_message?: string };
+    const googleStatus = data.status ?? 'UNKNOWN_ERROR';
+    const ok = response.ok && googleStatus === 'OK';
+    const status: KeyStatus = ok ? 'connected' : 'connection_failed';
 
-  const { data: authData, error: authError } = await authedClient.auth.getUser();
-  if (authError || !authData.user) return { statusCode: 401, body: JSON.stringify({ error: 'Invalid auth token.' }) };
+    await serviceClient.from('profiles').update({ google_maps_api_key_status: status, google_maps_api_key_last_tested_at: new Date().toISOString() }).eq('id', userId);
 
-  const { data: profile, error: profileError } = await serviceClient.from('profiles').select('google_maps_api_key_encrypted').eq('id', authData.user.id).single();
-  if (profileError) return { statusCode: 500, body: JSON.stringify({ error: profileError.message }) };
+    if (ok) return { statusCode: 200, body: JSON.stringify({ ok: true, status, hasSavedKey, maskedKey: hasSavedKey ? maskGoogleMapsKey(key) : null, googleStatus }) };
 
-  const key = decryptGoogleMapsKey(profile.google_maps_api_key_encrypted, process.env.GOOGLE_API_KEY_ENCRYPTION_SECRET);
-  if (!key) return { statusCode: 400, body: JSON.stringify({ error: 'No Google Maps API key saved.' }) };
-
-  const testUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent('1600 Amphitheatre Parkway, Mountain View, CA')}&key=${encodeURIComponent(key)}`;
-  const response = await fetch(testUrl);
-  const data = await response.json() as { status?: string };
-  const success = response.ok && data.status === 'OK';
-  const status: KeyStatus = success ? 'connected' : 'connection_failed';
-
-  await serviceClient.from('profiles').update({ google_maps_api_key_status: status, google_maps_api_key_last_tested_at: new Date().toISOString() }).eq('id', authData.user.id);
-
-  return { statusCode: 200, body: JSON.stringify({ ok: success, status, maskedKey: maskGoogleMapsKey(key) }) };
+    return { statusCode: 200, body: JSON.stringify({ ok: false, status, hasSavedKey, maskedKey: hasSavedKey ? maskGoogleMapsKey(key) : null, googleStatus, error: data.error_message || mapGoogleStatusToMessage(googleStatus) }) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const statusCode = message.includes('bearer token') || message.includes('auth token') ? 401 : 500;
+    return { statusCode, body: JSON.stringify({ ok: false, status: 'connection_failed', error: message }) };
+  }
 };
