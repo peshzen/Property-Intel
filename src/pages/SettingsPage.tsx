@@ -28,7 +28,6 @@ export function SettingsPage(){
   const [loadingDeleteKey, setLoadingDeleteKey] = useState(false);
   const [message, setMessage] = useState('');
   const [debug, setDebug] = useState<any>(null);
-  const [diagMsg, setDiagMsg] = useState('');
 
   useEffect(()=>{loadProfile().then((p: Profile | null)=>{if(p){setFullName(p.full_name ?? ''); setCompany(p.company ?? ''); setKeyStatus((p.google_maps_api_key_status as KeyStatus) ?? 'not_connected'); setMaskedKey(p.google_maps_api_key_encrypted ? 'Saved key on file' : '');}}).catch(()=>setMessage('Failed to load settings.'));},[]);
   const save = async ()=>{ await updateProfile({ full_name: fullName, company }); setMessage('Profile saved successfully.'); };
@@ -62,20 +61,6 @@ export function SettingsPage(){
     } catch { setMessage('Connection failed. Check billing, enabled APIs, API restrictions, and allowed referrers/IPs.'); } finally { setLoadingTestKey(false); }
   };
 
-
-  const runDiagnostics = async () => {
-    setDiagMsg('Running diagnostics...');
-    try {
-      const [geo, sv] = await Promise.all([
-        callAuthedFunction<any>('geocode-address', { address: '1600 Amphitheatre Parkway, Mountain View, CA' }),
-        callAuthedFunction<any>('google-street-view', { lat: 37.422, lng: -122.084 }),
-      ]);
-      setDiagMsg(`Geocode: ok (${geo.formatted_address || 'resolved'}) | Street View: ${sv.imageUrl ? 'ok' : 'no image'}`);
-    } catch (error) {
-      setDiagMsg((error as Error).message);
-    }
-  };
-
   const deleteApiKey = async () => {
     if (!confirm('Remove your saved Google Maps API key?')) return;
     setLoadingDeleteKey(true);
@@ -106,7 +91,7 @@ export function SettingsPage(){
       <button disabled={loadingDeleteKey || loadingSaveKey || loadingTestKey} className='px-4 py-2 border border-red-300 text-red-700 rounded disabled:opacity-60' onClick={deleteApiKey}>{loadingDeleteKey ? 'Removing...' : 'Remove API Key'}</button>
     </div>
     {message && <p className='text-sm'>{message}</p>}
-    {keyStatus === 'connection_failed' && <p className='text-xs text-slate-500'>Connection failed. Check billing, enabled APIs, API restrictions, and allowed referrers/IPs.</p>}
+    {keyStatus !== 'not_connected' && <p className='text-xs text-slate-500'>Connection failed. Check billing, enabled APIs, API restrictions, and allowed referrers/IPs.</p>}
   </div>
   {debug?.isAdmin && <div className='card p-4 space-y-1 text-xs'>
     <h3 className='font-semibold text-sm'>Google Maps Diagnostics (Admin)</h3>
@@ -116,8 +101,6 @@ export function SettingsPage(){
     <p>Last tested: {debug.lastTestedAt ?? 'never'}</p>
     <p>Geocode test: {debug.geocodeTest ?? 'not_run'}</p>
     <p>Street View test: {debug.streetViewTest ?? 'not_run'}</p>
-    <button className='mt-2 px-3 py-1 border rounded' onClick={runDiagnostics}>Run Live Diagnostics</button>
-    {diagMsg && <p className='text-[11px]'>{diagMsg}</p>}
   </div>}
 </div>;
 }
