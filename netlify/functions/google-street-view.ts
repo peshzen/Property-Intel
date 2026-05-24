@@ -1,6 +1,5 @@
 import type { Handler } from '@netlify/functions';
 import { getAuthenticatedClients, mapGoogleStatusToMessage, resolveGoogleMapsKeyForUser, tryGetAuthenticatedClients } from './_googleMapsKey';
-import { getAuthenticatedClients, mapGoogleStatusToMessage, resolveGoogleMapsKeyForUser } from './_googleMapsKey';
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' };
@@ -12,8 +11,9 @@ export const handler: Handler = async (event) => {
     const location = body.address?.trim() || (typeof body.lat === 'number' && typeof body.lng === 'number' ? `${body.lat},${body.lng}` : null);
     if (!location) return { statusCode: 400, body: JSON.stringify({ error: 'Provide address or lat/lng.' }) };
 
-    const key = strictAuth ? (await resolveGoogleMapsKeyForUser(strictAuth.serviceClient, strictAuth.userId)).key : (process.env.GOOGLE_MAPS_API_KEY || null);
-    const { key } = await resolveGoogleMapsKeyForUser(serviceClient, userId);
+    const key = strictAuth
+      ? (await resolveGoogleMapsKeyForUser(strictAuth.serviceClient, strictAuth.userId)).key
+      : (await resolveGoogleMapsKeyForUser(serviceClient, userId)).key;
     if (!key) return { statusCode: 400, body: JSON.stringify({ error: 'Missing Google Maps API key. Save one in settings or set GOOGLE_MAPS_API_KEY.' }) };
 
     const metadataUrl = `https://maps.googleapis.com/maps/api/streetview/metadata?size=1200x675&location=${encodeURIComponent(location)}&key=${encodeURIComponent(key)}`;
