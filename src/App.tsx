@@ -27,6 +27,8 @@ import { getPublicRecordsChecks } from './services/publicRecordsProvider';
 import { exportReportPdf } from './services/pdfService';
 import { createShareToken, shareUrl } from './services/shareService';
 import { SettingsPage as UserSettingsPage } from './pages/SettingsPage';
+import { supabase } from './lib/supabase';
+import { loadProfile } from './lib/db';
 
 type NavItem = { label: string; to: string; icon: React.ComponentType<{ className?: string }>; admin?: boolean };
 const navItems: NavItem[] = [
@@ -88,9 +90,25 @@ function Shell({ user, darkMode, setDarkMode, logout, children }: { user: AppUse
 export function App() {
   const [user, setUser] = useState<AppUser | null>(null);
   const [darkMode, setDarkMode] = useState(false);
-  useEffect(() => { seed(); setUser(db.session()); const savedTheme = localStorage.getItem('pi_theme'); setDarkMode(savedTheme ? savedTheme === 'dark' : true); }, []);
+  useEffect(() => {
+    seed();
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        const p = await loadProfile().catch(() => null);
+        if (p) {
+          setUser({ id: p.id, email: p.email, password: '', fullName: p.full_name ?? p.email, role: p.role, approvalStatus: p.approval_status, createdAt: new Date().toISOString() });
+          return;
+        }
+      }
+      setUser(db.session());
+    };
+    init();
+    const savedTheme = localStorage.getItem('pi_theme');
+    setDarkMode(savedTheme ? savedTheme === 'dark' : true);
+  }, []);
   useEffect(() => { document.documentElement.classList.toggle('dark', darkMode); localStorage.setItem('pi_theme', darkMode ? 'dark' : 'light'); }, [darkMode]);
-  const logout = () => { db.logout(); setUser(null); };
+  const logout = async () => { await supabase.auth.signOut(); db.logout(); setUser(null); };
   return <div className='min-h-screen'>{user ? <Shell user={user} darkMode={darkMode} setDarkMode={setDarkMode} logout={logout}><AppRoutes user={user} setUser={setUser} /></Shell> : <AppRoutes user={user} setUser={setUser} />}</div>;
 }
 
@@ -100,9 +118,17 @@ function AppRoutes({ user, setUser }: { user: AppUser | null; setUser: (u: AppUs
 
 const AuthScaffold = ({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) => <div className='relative flex min-h-screen items-center justify-center overflow-hidden bg-app p-6'><div className='absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,.25),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(14,165,233,.2),transparent_35%)]' /><div className='card-premium relative w-full max-w-md'><h1 className='text-2xl font-semibold'>{title}</h1><p className='mt-1 text-sm text-muted'>{subtitle}</p><div className='mt-6'>{children}</div></div></div>;
 function Login({ onLogin }: { onLogin: (u: AppUser) => void }) { const nav = useNavigate(); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
-  return <AuthScaffold title='Welcome back' subtitle='Access your investor workspace'><div className='space-y-3'><input className='input' placeholder='Email' value={email} onChange={(e) => setEmail(e.target.value)} /><input type='password' className='input' placeholder='Password' value={password} onChange={(e) => setPassword(e.target.value)} /><button className='btn-primary w-full' onClick={() => { try { const u = db.login(email, password); onLogin(u); nav(u.approvalStatus === 'approved' ? '/' : '/pending'); } catch (e) { setError((e as Error).message); } }}>Login</button><button className='btn-ghost w-full'>Continue with Google</button><Link className='text-sm text-brand hover:underline' to='/signup'>Create account</Link>{error && <p className='text-sm text-rose-400'>{error}</p>}</div></AuthScaffold>; }
+  return <AuthScaffold title='Welcome back' subtitle='Access your investor workspace'><div className='space-y-3'><input className='input' placeholder='Email' value={email} onChange={(e) => setEmail(e.target.value)} /><input type='password' className='input' placeholder='Password' value={password} onChange={(e) => setPassword(e.target.value)} /><button className='btn-primary w-full' onClick={async () => { try {
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    if (authError) throw authError;
+    const p = await loadProfile();
+    if (!p) throw new Error('Profile not found.');
+    const u: AppUser = { id: p.id, email: p.email, password: '', fullName: p.full_name ?? p.email, role: p.role, approvalStatus: p.approval_status, createdAt: new Date().toISOString() };
+    onLogin(u);
+    nav(u.approvalStatus === 'approved' ? '/' : '/pending');
+  } catch (e) { setError((e as Error).message); } }}>Login</button><button className='btn-ghost w-full'>Continue with Google</button><Link className='text-sm text-brand hover:underline' to='/signup'>Create account</Link>{error && <p className='text-sm text-rose-400'>{error}</p>}</div></AuthScaffold>; }
 function SignUp() { const nav = useNavigate(); const [fullName, setName] = useState(''); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
-  return <AuthScaffold title='Create investor account' subtitle='Start analyzing opportunities faster'><div className='space-y-3'><input className='input' placeholder='Full name' value={fullName} onChange={(e) => setName(e.target.value)} /><input className='input' placeholder='Email' value={email} onChange={(e) => setEmail(e.target.value)} /><input type='password' className='input' placeholder='Password' value={password} onChange={(e) => setPassword(e.target.value)} /><button className='btn-primary w-full' onClick={() => { try { db.signUp(email, password, fullName); nav('/login'); } catch (e) { setError((e as Error).message); } }}>Create account</button>{error && <p className='text-sm text-rose-400'>{error}</p>}</div></AuthScaffold>; }
+  return <AuthScaffold title='Create investor account' subtitle='Start analyzing opportunities faster'><div className='space-y-3'><input className='input' placeholder='Full name' value={fullName} onChange={(e) => setName(e.target.value)} /><input className='input' placeholder='Email' value={email} onChange={(e) => setEmail(e.target.value)} /><input type='password' className='input' placeholder='Password' value={password} onChange={(e) => setPassword(e.target.value)} /><button className='btn-primary w-full' onClick={async () => { try { const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName } } }); if (error) throw error; nav('/login'); } catch (e) { setError((e as Error).message); } }}>Create account</button>{error && <p className='text-sm text-rose-400'>{error}</p>}</div></AuthScaffold>; }
 function Pending() { return <AuthScaffold title='Approval in progress' subtitle='Your workspace unlocks once an admin approves'><Link to='/login' className='btn-primary inline-flex'>Back to login</Link></AuthScaffold>; }
 function Landing() { return <div className='min-h-screen bg-app text-app'><section className='mx-auto max-w-7xl p-6 lg:p-12'><div className='card-premium grid gap-8 lg:grid-cols-2'><div><p className='badge mb-4'>Investor-grade intelligence</p><h1 className='text-4xl font-bold leading-tight'>Analyze Properties Like a Professional Investor</h1><p className='mt-4 text-muted'>Generate AI-powered comp reports, ARV estimates, and investor insights in seconds.</p><div className='mt-6 flex gap-3'><Link to='/signup' className='btn-primary'>Start free trial</Link><Link to='/login' className='btn-ghost'>Sign in</Link></div></div><div className='rounded-3xl border border-app bg-card p-5 hover-card'><div className='space-y-3'><div className='skeleton h-16' /><div className='grid grid-cols-2 gap-3'><div className='skeleton h-24' /><div className='skeleton h-24' /></div><div className='skeleton h-28' /></div></div></div></section></div>; }
 
