@@ -1,6 +1,5 @@
 import type { Handler } from '@netlify/functions';
 import { getAuthenticatedClients, mapGoogleStatusToMessage, resolveGoogleMapsKeyForUser, tryGetAuthenticatedClients } from './_googleMapsKey';
-import { getAuthenticatedClients, mapGoogleStatusToMessage, resolveGoogleMapsKeyForUser } from './_googleMapsKey';
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' };
