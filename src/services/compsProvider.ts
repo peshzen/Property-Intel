@@ -1,9 +1,10 @@
+import { authHeaders } from './_netlifyAuth';
 import type { Comp } from '../types';
 import type { GeocodeResult, PropertyFacts } from '../types';
 
 export async function fetchComps(geocode: GeocodeResult, property: PropertyFacts, radiusMiles = 1): Promise<Comp[]> {
   const response = await fetch('/.netlify/functions/fetch-comps', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     body: JSON.stringify({ geocode, property, radiusMiles }),
   });
   if (!response.ok) throw new Error('Failed to fetch comparable sales');
@@ -12,7 +13,7 @@ export async function fetchComps(geocode: GeocodeResult, property: PropertyFacts
 
 export async function getComps(radiusMiles: number): Promise<Comp[]> {
   const response = await fetch('/.netlify/functions/fetch-comps', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     body: JSON.stringify({ radiusMiles }),
   });
   if (!response.ok) throw new Error('Failed to fetch comparable sales');

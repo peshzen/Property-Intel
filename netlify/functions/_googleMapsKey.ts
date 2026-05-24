@@ -16,7 +16,7 @@ function deriveAesKey(secret: string): Buffer {
 export function encryptGoogleMapsKey(key: string, secret?: string): string {
   const normalized = key.trim();
   if (!normalized) throw new Error('Google Maps API key cannot be empty.');
-  if (!secret) return `plain:${normalized}`;
+  if (!secret) throw new Error('GOOGLE_API_KEY_ENCRYPTION_SECRET is required to store Google Maps API keys.');
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv('aes-256-gcm', deriveAesKey(secret), iv);
   const encrypted = Buffer.concat([cipher.update(normalized, 'utf8'), cipher.final()]);
@@ -26,7 +26,6 @@ export function encryptGoogleMapsKey(key: string, secret?: string): string {
 
 export function decryptGoogleMapsKey(payload?: string | null, secret?: string): string | null {
   if (!payload) return null;
-  if (payload.startsWith('plain:')) return payload.slice(6);
   if (!payload.startsWith('enc:') || !secret) return null;
   const [, ivB64, tagB64, dataB64] = payload.split(':');
   if (!ivB64 || !tagB64 || !dataB64) return null;

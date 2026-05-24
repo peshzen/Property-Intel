@@ -1,10 +1,25 @@
 import type { Handler } from '@netlify/functions';
+import { json, parseJsonBody, requireApprovedUser } from './_auth';
 
 export const handler: Handler = async (event) => {
-  if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' };
-  const payload = JSON.parse(event.body ?? '{}');
+  if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
+
+  try {
+    await requireApprovedUser(event.headers.authorization || event.headers.Authorization);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unauthorized';
+    return json(message === 'User is not approved.' ? 403 : 401, { error: message });
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = parseJsonBody(event.body ?? null);
+  } catch (error) {
+    return json(400, { error: error instanceof Error ? error.message : 'Invalid JSON body.' });
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return { statusCode: 200, body: JSON.stringify({ summary: 'AI summary unavailable: OPENAI_API_KEY not configured. Report generated with factual provider data only.' }) };
+  if (!apiKey) return json(200, { summary: 'AI summary unavailable: OPENAI_API_KEY not configured. Report generated with factual provider data only.' });
 
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -15,6 +30,5 @@ export const handler: Handler = async (event) => {
     }),
   });
   const data = await response.json();
-  const summary = data.output_text ?? 'AI analysis completed with limited formatting.';
-  return { statusCode: 200, body: JSON.stringify({ summary }) };
+  return json(200, { summary: data.output_text ?? 'AI analysis completed with limited formatting.' });
 };

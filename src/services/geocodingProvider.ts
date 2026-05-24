@@ -1,9 +1,10 @@
+import { authHeaders } from './_netlifyAuth';
 import type { GeocodeResult } from '../types';
 
 export async function geocodeAddress(address: string): Promise<GeocodeResult> {
   const response = await fetch('/.netlify/functions/generate-report', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     body: JSON.stringify({ mode: 'geocode', address }),
   });
   if (!response.ok) throw new Error('Failed to geocode address');
