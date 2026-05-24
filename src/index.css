@@ -1,2 +1,46 @@
-@tailwind base; @tailwind components; @tailwind utilities;
-body{@apply text-slate-900 dark:text-slate-100} .card{@apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 shadow-sm}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --app-bg: 248 250 252;
+  --app-text: 15 23 42;
+  --panel: 255 255 255;
+  --card: 255 255 255;
+  --border: 226 232 240;
+  --muted: 100 116 139;
+  --brand: 79 70 229;
+}
+.dark {
+  --app-bg: 2 6 23;
+  --app-text: 241 245 249;
+  --panel: 15 23 42;
+  --card: 15 23 42;
+  --border: 51 65 85;
+  --muted: 148 163 184;
+  --brand: 129 140 248;
+}
+
+@layer base {
+  body { @apply antialiased; background: rgb(var(--app-bg)); color: rgb(var(--app-text)); }
+}
+
+@layer components {
+  .bg-app { background: rgb(var(--app-bg)); }
+  .text-app { color: rgb(var(--app-text)); }
+  .bg-panel { background: rgb(var(--panel)); }
+  .bg-card { background: rgb(var(--card)); }
+  .border-app { border-color: rgb(var(--border)); }
+  .text-muted { color: rgb(var(--muted)); }
+  .text-brand { color: rgb(var(--brand)); }
+  .card { @apply rounded-2xl border border-app bg-card p-4 shadow-sm; }
+  .card-premium { @apply rounded-3xl border border-app bg-card p-6 shadow-xl shadow-slate-950/10 backdrop-blur; }
+  .input { @apply w-full rounded-xl border border-app bg-transparent px-4 py-2.5 text-sm outline-none transition focus:border-indigo-400; }
+  .btn-primary { @apply inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-500; }
+  .btn-ghost { @apply inline-flex items-center justify-center gap-2 rounded-xl border border-app bg-card px-3 py-2 text-sm transition hover:bg-slate-100/60 dark:hover:bg-slate-800; }
+  .badge { @apply inline-flex rounded-full border border-app bg-slate-100 px-2.5 py-1 text-xs dark:bg-slate-800; }
+  .nav-link { @apply flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition hover:bg-slate-100/70 dark:hover:bg-slate-800; }
+  .mobile-tab { @apply flex flex-col items-center rounded-xl px-2 py-2 text-[11px] text-muted; }
+  .hover-card { @apply transition duration-200 hover:-translate-y-0.5 hover:shadow-md; }
+  .skeleton { @apply animate-pulse rounded-xl bg-slate-200/70 dark:bg-slate-700/60; }
+}
