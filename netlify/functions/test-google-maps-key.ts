@@ -4,8 +4,8 @@ import { decryptGoogleMapsKey, maskGoogleMapsKey, type KeyStatus } from './_goog
 
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' };
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const anonKey = process.env.SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !anonKey || !serviceKey) return { statusCode: 500, body: JSON.stringify({ error: 'Missing Supabase environment variables.' }) };
 

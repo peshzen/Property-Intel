@@ -22,6 +22,7 @@ Production-minded MVP for investor comparable reports using React + Vite + TypeS
 ## Environment variables
 - `VITE_SUPABASE_URL` (**required**) - Supabase project URL used by the browser app.
 - `VITE_SUPABASE_ANON_KEY` (**required**) - Supabase anon/public key used by the browser app.
+- `SUPABASE_URL` and `SUPABASE_ANON_KEY` (**recommended for Netlify Functions**) - Server-side aliases used by Netlify Functions. If omitted, functions fall back to `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 - `SUPABASE_SERVICE_ROLE_KEY` (**required for admin/server functions only**) - Set in Netlify environment variables, never commit to the client.
 - `GOOGLE_MAPS_API_KEY` (**optional**) - If missing, street-view images gracefully fall back to `null` and the app keeps working.
 - `OPENAI_API_KEY` (**optional**) - Only needed when AI summary generation is wired to a real provider; mock summary path still works without it.
