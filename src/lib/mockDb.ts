@@ -13,6 +13,15 @@ export interface AppUser {
   createdAt: string;
 }
 
+export interface AppAuditLog {
+  id: string;
+  adminUserId: string;
+  action: 'user_approved' | 'user_denied';
+  targetUserId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface AppReport {
   id: string;
   userId: string;
@@ -33,6 +42,7 @@ export interface AppReport {
 const USERS_KEY = 'pi_users';
 const REPORTS_KEY = 'pi_reports';
 const SESSION_KEY = 'pi_session';
+const AUDIT_LOG_KEY = 'pi_admin_audit_log';
 
 function read<T>(key: string, fallback: T): T {
   const raw = localStorage.getItem(key);
@@ -73,6 +83,15 @@ export const db = {
   listUsers() { return read<AppUser[]>(USERS_KEY, []); },
   updateUser(user: AppUser) {
     write(USERS_KEY, read<AppUser[]>(USERS_KEY, []).map((u) => (u.id === user.id ? user : u)));
+  },
+
+  listAuditLogs() {
+    return read<AppAuditLog[]>(AUDIT_LOG_KEY, []);
+  },
+  addAuditLog(log: Omit<AppAuditLog, 'id' | 'createdAt'>) {
+    const full: AppAuditLog = { ...log, id: uuidv4(), createdAt: new Date().toISOString() };
+    write(AUDIT_LOG_KEY, [full, ...read<AppAuditLog[]>(AUDIT_LOG_KEY, [])]);
+    return full;
   },
   saveReport(report: Omit<AppReport, 'id' | 'createdAt'>) {
     const full: AppReport = { ...report, id: uuidv4(), createdAt: new Date().toISOString() };

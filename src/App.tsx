@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { db, seed, type AppReport, type AppUser } from './lib/mockDb';
+import { db, seed, type AppAuditLog, type AppReport, type AppUser } from './lib/mockDb';
 import { geocodeAddress } from './services/geocodingProvider';
 import { getPropertyFacts } from './services/propertyDataProvider';
 import { getComps } from './services/compsProvider';
@@ -9,19 +9,29 @@ import { getPublicRecordsChecks } from './services/publicRecordsProvider';
 import { exportReportPdf } from './services/pdfService';
 
 function Guard({ user, children }: { user: AppUser | null; children: React.ReactElement }) { return user ? children : <Navigate to='/login' replace />; }
+function ApprovedGuard({ user, children }: { user: AppUser | null; children: React.ReactElement }) {
+  if (!user) return <Navigate to='/login' replace />;
+  if (user.approvalStatus !== 'approved') return <Navigate to='/pending' replace />;
+  return children;
+}
+function AdminGuard({ user, children }: { user: AppUser | null; children: React.ReactElement }) {
+  if (!user) return <Navigate to='/login' replace />;
+  if (user.role !== 'admin' || user.approvalStatus !== 'approved') return <Navigate to='/' replace />;
+  return children;
+}
 
 export function App() {
   const [user, setUser] = useState<AppUser | null>(null);
   useEffect(() => { seed(); setUser(db.session()); }, []);
   const logout = () => { db.logout(); setUser(null); };
-  return <div className='min-h-screen bg-slate-50'><header className='p-4 border-b flex gap-3'><b>Property Intel</b>{user && <><Link to='/'>Dashboard</Link><Link to='/create'>Create Report</Link>{user.role==='admin' && <Link to='/admin'>Admin</Link>}<button className='ml-auto underline' onClick={logout}>Logout</button></>}</header><main className='p-4'><Routes>
+  return <div className='min-h-screen bg-slate-50'><header className='p-4 border-b flex gap-3'><b>Property Intel</b>{user && <><Link to='/'>Dashboard</Link><Link to='/create'>Create Report</Link>{user.role==='admin' && user.approvalStatus==='approved' && <Link to='/admin'>Admin</Link>}<button className='ml-auto underline' onClick={logout}>Logout</button></>}</header><main className='p-4'><Routes>
     <Route path='/login' element={<Login onLogin={setUser} />} />
     <Route path='/signup' element={<SignUp />} />
     <Route path='/pending' element={<Pending />} />
     <Route path='/' element={<Guard user={user}><Dashboard user={user!} /></Guard>} />
-    <Route path='/create' element={<Guard user={user}><Create user={user!} /></Guard>} />
-    <Route path='/admin' element={<Guard user={user}><Admin user={user!} /></Guard>} />
-    <Route path='/reports/:id' element={<Guard user={user}><ReportDetail user={user!} /></Guard>} />
+    <Route path='/create' element={<ApprovedGuard user={user}><Create user={user!} /></ApprovedGuard>} />
+    <Route path='/admin' element={<AdminGuard user={user}><Admin user={user!} /></AdminGuard>} />
+    <Route path='/reports/:id' element={<ApprovedGuard user={user}><ReportDetail user={user!} /></ApprovedGuard>} />
   </Routes></main></div>;
 }
 
@@ -33,7 +43,16 @@ function Pending(){return <div className='card'><h1 className='text-xl'>Pending 
 function Dashboard({user}:{user:AppUser}){const [q,setQ]=useState(''); const reports=useMemo(()=>db.listReports(user).filter(r=>`${r.address} ${r.city}`.toLowerCase().includes(q.toLowerCase())),[user,q]); if(user.approvalStatus!=='approved') return <Navigate to='/pending' replace/>; return <div className='space-y-3'><h1 className='text-xl'>Dashboard</h1><input className='border p-2 rounded w-full' placeholder='Search reports' value={q} onChange={e=>setQ(e.target.value)} />{reports.map(r=><Link key={r.id} to={`/reports/${r.id}`} className='card block'><b>{r.address}</b><p>{r.city}, {r.state} • ⭐ {r.starRating}</p></Link>)}{reports.length===0&&<p>No reports found.</p>}</div>}
 function Create({user}:{user:AppUser}){const nav=useNavigate(); const [address,setAddress]=useState(''); const [loading,setLoading]=useState(false); const [error,setError]=useState('');
 return <div className='card space-y-2'><h1 className='text-xl'>Create report</h1><input className='border p-2 w-full' value={address} onChange={e=>setAddress(e.target.value)} placeholder='123 Main St, Miami, FL' /><button className='bg-slate-900 text-white px-4 py-2 rounded' onClick={async()=>{if(!address){setError('Address is required.');return;} setLoading(true); setError(''); try{const geo=await geocodeAddress(address); const facts=await getPropertyFacts(address); const comps=await getComps(1); const checks=await getPublicRecordsChecks(); const score=scoreReport(facts, comps); const report=db.saveReport({userId:user.id,address,city:geo.city,state:geo.state,county:'Demo County',zip:geo.zip??'00000',estimatedArv:score.estimatedArv,upsetPrice:score.suggestedMaxOffer,myArv:score.estimatedArv,starRating:Math.max(1,Math.min(5,Math.round(score.confidence/20))),customFields:[],details:{geo,facts,comps,checks,provider:'mock'}}); nav(`/reports/${report.id}`);}catch(e){setError((e as Error).message||'Failed to create report.');} finally{setLoading(false);}}}>{loading?'Generating...':'Generate + Save Report'}</button>{error&&<p className='text-red-600'>{error}</p>}<p className='text-sm'>Uses demo provider data when external APIs are unavailable.</p></div>}
-function Admin({user}:{user:AppUser}){const [,setTick]=useState(0); if(user.role!=='admin') return <p>Unauthorized.</p>; const pending=db.listUsers().filter(u=>u.approvalStatus==='pending'); return <div className='space-y-2'><h1 className='text-xl'>Admin approvals</h1>{pending.map(u=><div key={u.id} className='card'><p>{u.fullName} ({u.email})</p><button className='mr-2 underline' onClick={()=>{u.approvalStatus='approved'; db.updateUser(u); setTick(t=>t+1);}}>Approve</button><button className='underline' onClick={()=>{u.approvalStatus='denied'; db.updateUser(u); setTick(t=>t+1);}}>Deny</button></div>)}{pending.length===0&&<p>No pending users.</p>}</div>}
+function Admin({user}:{user:AppUser}){const [pendingUsers,setPendingUsers]=useState(()=>db.listUsers().filter(u=>u.approvalStatus==='pending')); const reports=db.listReports(user); const auditLogs=db.listAuditLogs();
+
+const setApproval = (targetUser: AppUser, status: 'approved'|'denied') => {
+  const updatedUser = { ...targetUser, approvalStatus: status };
+  db.updateUser(updatedUser);
+  db.addAuditLog({ adminUserId: user.id, action: status === 'approved' ? 'user_approved' : 'user_denied', targetUserId: targetUser.id, metadata: { targetEmail: targetUser.email, newStatus: status } });
+  setPendingUsers(db.listUsers().filter(u=>u.approvalStatus==='pending'));
+};
+
+return <div className='space-y-4'><h1 className='text-xl'>Admin approvals</h1><div className='card'><h2 className='font-semibold mb-2'>Pending Users</h2>{pendingUsers.map(u=><div key={u.id} className='border rounded p-2 mb-2'><p>{u.fullName} ({u.email})</p><div className='space-x-2'><button className='mr-2 underline' onClick={()=>setApproval(u,'approved')}>Approve</button><button className='underline' onClick={()=>setApproval(u,'denied')}>Deny</button></div></div>)}{pendingUsers.length===0&&<p>No pending users.</p>}</div><div className='card'><h2 className='font-semibold mb-2'>Reports</h2>{reports.map(r=><div key={r.id} className='border rounded p-2 mb-2'>{r.address} · {r.city}, {r.state}</div>)}{reports.length===0&&<p>No reports yet.</p>}</div><div className='card'><h2 className='font-semibold mb-2'>Admin Audit Log</h2>{auditLogs.map((log:AppAuditLog)=><div key={log.id} className='border rounded p-2 mb-2'><p>{new Date(log.createdAt).toLocaleString()} · {log.action}</p><p className='text-sm text-slate-600'>target user: {log.targetUserId ?? 'n/a'}</p></div>)}{auditLogs.length===0&&<p>No audit records yet.</p>}</div></div>}
 function ReportDetail({user}:{user:AppUser}){const {id=''}=useParams(); const [report,setReport]=useState<AppReport|null>(db.getReport(id)); const [k,setK]=useState(''); const [v,setV]=useState(''); if(!report) return <p>Report not found.</p>; if(user.role!=='admin'&&report.userId!==user.id) return <p>Unauthorized.</p>;
 const save=()=>{db.updateReport(report); setReport({...report});};
 return <div className='space-y-2'><h1 className='text-xl'>{report.address}</h1><div className='card'><label>Star rating <input type='number' min={1} max={5} value={report.starRating} onChange={e=>setReport({...report,starRating:Number(e.target.value)})} /></label><label className='ml-4'>My ARV <input type='number' value={report.myArv} onChange={e=>setReport({...report,myArv:Number(e.target.value)})} /></label><label className='ml-4'>Upset price <input type='number' value={report.upsetPrice} onChange={e=>setReport({...report,upsetPrice:Number(e.target.value)})} /></label><button className='ml-4 underline' onClick={save}>Save</button></div><div className='card'><h3>Custom fields</h3>{report.customFields.map((f,i)=><p key={i}>{f.key}: {f.value}</p>)}<input className='border p-1 mr-2' placeholder='Field' value={k} onChange={e=>setK(e.target.value)} /><input className='border p-1 mr-2' placeholder='Value' value={v} onChange={e=>setV(e.target.value)} /><button className='underline' onClick={()=>{if(!k) return; setReport({...report,customFields:[...report.customFields,{key:k,value:v}]}); setK(''); setV('');}}>Add</button></div><button className='bg-slate-900 text-white px-3 py-2 rounded' onClick={()=>exportReportPdf({id:report.id,user_id:report.userId,address:report.address,city:report.city,county:report.county,state:report.state,zip:report.zip,latitude:0,longitude:0,main_image_url:null,property_images:[],zillow_estimate:null,realtor_estimate:null,estimated_arv:report.myArv,upset_price:report.upsetPrice,star_rating:report.starRating,report_data:report.details,custom_fields:report.customFields,share_token:null,created_at:report.createdAt})}>Download PDF</button></div>}
