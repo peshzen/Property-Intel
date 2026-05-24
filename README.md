@@ -13,11 +13,19 @@ Production-minded MVP for investor comparable reports using React + Vite + TypeS
 - Dark/light mode and mobile-first UI structure
 
 ## Setup
-1. Copy `.env.example` to `.env` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+1. Copy `.env.example` to `.env` and set required variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`). Optional keys can be left empty for mock/fallback behavior.
 2. Install dependencies: `npm install`
 3. Run app: `npm run dev`
 4. Build: `npm run build`
 5. Test: `npm run test`
+
+## Environment variables
+- `VITE_SUPABASE_URL` (**required**) - Supabase project URL used by the browser app.
+- `VITE_SUPABASE_ANON_KEY` (**required**) - Supabase anon/public key used by the browser app.
+- `SUPABASE_SERVICE_ROLE_KEY` (**required for admin/server functions only**) - Set in Netlify environment variables, never commit to the client.
+- `GOOGLE_MAPS_API_KEY` (**optional**) - If missing, street-view images gracefully fall back to `null` and the app keeps working.
+- `OPENAI_API_KEY` (**optional**) - Only needed when AI summary generation is wired to a real provider; mock summary path still works without it.
+- `PROPERTY_DATA_API_KEY` (**optional**) - Reserved for future paid property-data adapters; current app uses mock fallback data when unset.
 
 ## Supabase
 - Run migration in `supabase/migrations/202605240001_init.sql`.
@@ -27,7 +35,7 @@ Production-minded MVP for investor comparable reports using React + Vite + TypeS
 ## Netlify
 - `netlify.toml` config included.
 - Functions in `netlify/functions`.
-- Keep `SUPABASE_SERVICE_ROLE_KEY` and `OPENAI_API_KEY` only in Netlify environment variables.
+- Keep sensitive server-only values such as `SUPABASE_SERVICE_ROLE_KEY` and `OPENAI_API_KEY` in Netlify environment variables (not in client code).
 
 ## Provider adapters
 See `src/services/*Provider.ts` and service modules:
