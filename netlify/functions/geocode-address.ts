@@ -4,11 +4,12 @@ import { getAuthenticatedClients, mapGoogleStatusToMessage, resolveGoogleMapsKey
 export const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' };
   try {
-    const { serviceClient, userId } = await getAuthenticatedClients(event);
+    const auth = await tryGetAuthenticatedClients(event);
+    const strictAuth = auth ?? (event.headers.authorization || event.headers.Authorization ? await getAuthenticatedClients(event) : null);
     const { address } = JSON.parse(event.body || '{}') as { address?: string };
     if (!address?.trim()) return { statusCode: 400, body: JSON.stringify({ error: 'Address is required.' }) };
 
-    const { key } = await resolveGoogleMapsKeyForUser(serviceClient, userId);
+    const key = strictAuth ? (await resolveGoogleMapsKeyForUser(strictAuth.serviceClient, strictAuth.userId)).key : (process.env.GOOGLE_MAPS_API_KEY || null);
     if (!key) return { statusCode: 400, body: JSON.stringify({ error: 'Missing Google Maps API key. Save one in settings or set GOOGLE_MAPS_API_KEY.' }) };
 
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${encodeURIComponent(key)}`;

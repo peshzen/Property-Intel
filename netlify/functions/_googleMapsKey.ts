@@ -74,3 +74,22 @@ export async function resolveGoogleMapsKeyForUser(serviceClient: ReturnType<type
 }
 
 export type { KeyStatus };
+
+export function getBearerToken(event: HandlerEvent): string | null {
+  const authHeader = event.headers.authorization || event.headers.Authorization;
+  return authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+}
+
+export async function tryGetAuthenticatedClients(event: HandlerEvent) {
+  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !anonKey || !serviceKey) throw new Error('Missing Supabase environment variables.');
+  const token = getBearerToken(event);
+  if (!token) return null;
+  const authedClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: `Bearer ${token}` } } });
+  const serviceClient = createClient(supabaseUrl, serviceKey);
+  const { data: authData, error: authError } = await authedClient.auth.getUser();
+  if (authError || !authData.user) return null;
+  return { serviceClient, userId: authData.user.id };
+}
