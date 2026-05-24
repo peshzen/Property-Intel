@@ -1,39 +1,119 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import { db, seed, type AppReport, type AppUser } from './lib/mockDb';
-import { geocodeAddress } from './services/geocodingProvider';
-import { getPropertyFacts } from './services/propertyDataProvider';
-import { getComps } from './services/compsProvider';
-import { scoreReport } from './services/reportScoringService';
-import { getPublicRecordsChecks } from './services/publicRecordsProvider';
-import { exportReportPdf } from './services/pdfService';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { AdminPage } from './pages/AdminPage';
+import { CreateReportPage } from './pages/CreateReportPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { AppProfile, fetchProfile, hasSupabaseEnv, supabase } from './lib/supabaseClient';
 
-function Guard({ user, children }: { user: AppUser | null; children: React.ReactElement }) { return user ? children : <Navigate to='/login' replace />; }
-
-export function App() {
-  const [user, setUser] = useState<AppUser | null>(null);
-  useEffect(() => { seed(); setUser(db.session()); }, []);
-  const logout = () => { db.logout(); setUser(null); };
-  return <div className='min-h-screen bg-slate-50'><header className='p-4 border-b flex gap-3'><b>Property Intel</b>{user && <><Link to='/'>Dashboard</Link><Link to='/create'>Create Report</Link>{user.role==='admin' && <Link to='/admin'>Admin</Link>}<button className='ml-auto underline' onClick={logout}>Logout</button></>}</header><main className='p-4'><Routes>
-    <Route path='/login' element={<Login onLogin={setUser} />} />
-    <Route path='/signup' element={<SignUp />} />
-    <Route path='/pending' element={<Pending />} />
-    <Route path='/' element={<Guard user={user}><Dashboard user={user!} /></Guard>} />
-    <Route path='/create' element={<Guard user={user}><Create user={user!} /></Guard>} />
-    <Route path='/admin' element={<Guard user={user}><Admin user={user!} /></Guard>} />
-    <Route path='/reports/:id' element={<Guard user={user}><ReportDetail user={user!} /></Guard>} />
-  </Routes></main></div>;
+function SupabaseSetupError() {
+  return <div className='min-h-screen flex items-center justify-center p-6'><div className='max-w-xl rounded border border-red-300 bg-red-50 p-6 text-red-900'><h1 className='text-2xl font-bold mb-2'>Supabase is not configured</h1><p>Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> to your environment and restart the app.</p><p className='mt-2 text-sm'>Do not use a service role key in frontend code.</p></div></div>;
 }
 
-function Login({ onLogin }: { onLogin: (u: AppUser) => void }) { const nav = useNavigate(); const [email,setEmail]=useState(''); const [password,setPassword]=useState(''); const [error,setError]=useState('');
-  return <div className='card max-w-md mx-auto'><h1>Login</h1><input className='border p-2 w-full mt-2' placeholder='Email' value={email} onChange={e=>setEmail(e.target.value)} /><input type='password' className='border p-2 w-full mt-2' placeholder='Password' value={password} onChange={e=>setPassword(e.target.value)} /><button className='mt-2 bg-slate-900 text-white px-4 py-2 rounded' onClick={()=>{try{const u=db.login(email,password); onLogin(u); nav(u.approvalStatus==='approved'?'/':'/pending');}catch(e){setError((e as Error).message)}}}>Login</button><Link className='block mt-2 underline' to='/signup'>Create account</Link>{error && <p className='text-red-600'>{error}</p>}<p className='text-xs mt-2'>Demo admin: admin@propertyintel.app / admin123</p></div>; }
-function SignUp() { const nav=useNavigate(); const [fullName,setName]=useState(''); const [email,setEmail]=useState(''); const [password,setPassword]=useState(''); const [error,setError]=useState('');
-  return <div className='card max-w-md mx-auto'><h1>Sign up</h1><input className='border p-2 w-full mt-2' placeholder='Full name' value={fullName} onChange={e=>setName(e.target.value)} /><input className='border p-2 w-full mt-2' placeholder='Email' value={email} onChange={e=>setEmail(e.target.value)} /><input type='password' className='border p-2 w-full mt-2' placeholder='Password' value={password} onChange={e=>setPassword(e.target.value)} /><button className='mt-2 bg-slate-900 text-white px-4 py-2 rounded' onClick={()=>{try{db.signUp(email,password,fullName); nav('/login');}catch(e){setError((e as Error).message)}}}>Create account</button>{error && <p className='text-red-600'>{error}</p>}</div>; }
-function Pending(){return <div className='card'><h1 className='text-xl'>Pending approval</h1><p>Your account is waiting for admin approval.</p><Link to='/login' className='underline'>Back to login</Link></div>}
-function Dashboard({user}:{user:AppUser}){const [q,setQ]=useState(''); const reports=useMemo(()=>db.listReports(user).filter(r=>`${r.address} ${r.city}`.toLowerCase().includes(q.toLowerCase())),[user,q]); if(user.approvalStatus!=='approved') return <Navigate to='/pending' replace/>; return <div className='space-y-3'><h1 className='text-xl'>Dashboard</h1><input className='border p-2 rounded w-full' placeholder='Search reports' value={q} onChange={e=>setQ(e.target.value)} />{reports.map(r=><Link key={r.id} to={`/reports/${r.id}`} className='card block'><b>{r.address}</b><p>{r.city}, {r.state} • ⭐ {r.starRating}</p></Link>)}{reports.length===0&&<p>No reports found.</p>}</div>}
-function Create({user}:{user:AppUser}){const nav=useNavigate(); const [address,setAddress]=useState(''); const [loading,setLoading]=useState(false); const [error,setError]=useState('');
-return <div className='card space-y-2'><h1 className='text-xl'>Create report</h1><input className='border p-2 w-full' value={address} onChange={e=>setAddress(e.target.value)} placeholder='123 Main St, Miami, FL' /><button className='bg-slate-900 text-white px-4 py-2 rounded' onClick={async()=>{if(!address){setError('Address is required.');return;} setLoading(true); setError(''); try{const geo=await geocodeAddress(address); const facts=await getPropertyFacts(address); const comps=await getComps(1); const checks=await getPublicRecordsChecks(); const score=scoreReport(facts, comps); const report=db.saveReport({userId:user.id,address,city:geo.city,state:geo.state,county:'Demo County',zip:geo.zip??'00000',estimatedArv:score.estimatedArv,upsetPrice:score.suggestedMaxOffer,myArv:score.estimatedArv,starRating:Math.max(1,Math.min(5,Math.round(score.confidence/20))),customFields:[],details:{geo,facts,comps,checks,provider:'mock'}}); nav(`/reports/${report.id}`);}catch(e){setError((e as Error).message||'Failed to create report.');} finally{setLoading(false);}}}>{loading?'Generating...':'Generate + Save Report'}</button>{error&&<p className='text-red-600'>{error}</p>}<p className='text-sm'>Uses demo provider data when external APIs are unavailable.</p></div>}
-function Admin({user}:{user:AppUser}){const [,setTick]=useState(0); if(user.role!=='admin') return <p>Unauthorized.</p>; const pending=db.listUsers().filter(u=>u.approvalStatus==='pending'); return <div className='space-y-2'><h1 className='text-xl'>Admin approvals</h1>{pending.map(u=><div key={u.id} className='card'><p>{u.fullName} ({u.email})</p><button className='mr-2 underline' onClick={()=>{u.approvalStatus='approved'; db.updateUser(u); setTick(t=>t+1);}}>Approve</button><button className='underline' onClick={()=>{u.approvalStatus='denied'; db.updateUser(u); setTick(t=>t+1);}}>Deny</button></div>)}{pending.length===0&&<p>No pending users.</p>}</div>}
-function ReportDetail({user}:{user:AppUser}){const {id=''}=useParams(); const [report,setReport]=useState<AppReport|null>(db.getReport(id)); const [k,setK]=useState(''); const [v,setV]=useState(''); if(!report) return <p>Report not found.</p>; if(user.role!=='admin'&&report.userId!==user.id) return <p>Unauthorized.</p>;
-const save=()=>{db.updateReport(report); setReport({...report});};
-return <div className='space-y-2'><h1 className='text-xl'>{report.address}</h1><div className='card'><label>Star rating <input type='number' min={1} max={5} value={report.starRating} onChange={e=>setReport({...report,starRating:Number(e.target.value)})} /></label><label className='ml-4'>My ARV <input type='number' value={report.myArv} onChange={e=>setReport({...report,myArv:Number(e.target.value)})} /></label><label className='ml-4'>Upset price <input type='number' value={report.upsetPrice} onChange={e=>setReport({...report,upsetPrice:Number(e.target.value)})} /></label><button className='ml-4 underline' onClick={save}>Save</button></div><div className='card'><h3>Custom fields</h3>{report.customFields.map((f,i)=><p key={i}>{f.key}: {f.value}</p>)}<input className='border p-1 mr-2' placeholder='Field' value={k} onChange={e=>setK(e.target.value)} /><input className='border p-1 mr-2' placeholder='Value' value={v} onChange={e=>setV(e.target.value)} /><button className='underline' onClick={()=>{if(!k) return; setReport({...report,customFields:[...report.customFields,{key:k,value:v}]}); setK(''); setV('');}}>Add</button></div><button className='bg-slate-900 text-white px-3 py-2 rounded' onClick={()=>exportReportPdf({id:report.id,user_id:report.userId,address:report.address,city:report.city,county:report.county,state:report.state,zip:report.zip,latitude:0,longitude:0,main_image_url:null,property_images:[],zillow_estimate:null,realtor_estimate:null,estimated_arv:report.myArv,upset_price:report.upsetPrice,star_rating:report.starRating,report_data:report.details,custom_fields:report.customFields,share_token:null,created_at:report.createdAt})}>Download PDF</button></div>}
+function PendingApprovalPage() { return <div className='card'><h1 className='text-xl font-semibold'>Pending Approval</h1><p>Your account is awaiting admin approval.</p></div>; }
+function DeniedAccountPage() { return <div className='card'><h1 className='text-xl font-semibold text-red-700'>Account Denied</h1><p>Your account was denied. Contact support or an administrator.</p></div>; }
+
+export function App() {
+  const navigate = useNavigate();
+  const [dark, setDark] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
+  const [profile, setProfile] = useState<AppProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const routeAfterProfile = (p: AppProfile) => {
+    if (p.approval_status === 'denied') return '/denied';
+    if (p.role === 'admin' && p.approval_status === 'approved') return '/admin';
+    if (p.approval_status === 'approved') return '/dashboard';
+    return '/pending-approval';
+  };
+
+  const loadProfileWithRetry = async (userId: string) => {
+    for (let i = 0; i < 6; i += 1) {
+      const p = await fetchProfile(userId);
+      if (p) return p;
+      await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') document.documentElement.classList.toggle('dark', dark);
+  }, [dark]);
+
+  useEffect(() => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+    const client = supabase;
+
+    const init = async () => {
+      const { data } = await client.auth.getSession();
+      const userId = data.session?.user.id ?? null;
+      setSessionUserId(userId);
+      if (userId) {
+        const p = await loadProfileWithRetry(userId);
+        setProfile(p);
+        if (p) navigate(routeAfterProfile(p), { replace: true });
+      }
+      setLoading(false);
+    };
+
+    init();
+
+    const { data: listener } = client.auth.onAuthStateChange(async (_event, session) => {
+      const userId = session?.user.id ?? null;
+      setSessionUserId(userId);
+      if (!userId) {
+        setProfile(null);
+        navigate('/');
+        return;
+      }
+      const p = await loadProfileWithRetry(userId);
+      setProfile(p);
+      if (p) navigate(routeAfterProfile(p), { replace: true });
+      else navigate('/pending-approval', { replace: true });
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, [navigate]);
+
+  const isLoggedIn = useMemo(() => Boolean(sessionUserId), [sessionUserId]);
+
+  const signIn = async () => {
+    setAuthError(null);
+    if (!supabase) return;
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setAuthError(error.message);
+  };
+
+  const signUp = async () => {
+    setAuthError(null);
+    if (!supabase) return;
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) setAuthError(error.message);
+  };
+
+  const signOut = async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+  };
+
+  if (!hasSupabaseEnv) return <SupabaseSetupError />;
+  if (loading) return <div className='p-6'>Loading...</div>;
+
+  return <div className='min-h-screen'><header className='p-4 border-b flex gap-4 items-center'><b>Property Comp Analyzer</b><nav className='flex gap-3 text-sm'><Link to='/dashboard'>Dashboard</Link><Link to='/create'>Create</Link><Link to='/admin'>Admin</Link><Link to='/settings'>Settings</Link></nav><button className='border px-3 py-1 rounded' onClick={() => setDark(!dark)}>{dark ? 'Light' : 'Dark'} mode</button>{isLoggedIn ? <button className='border px-3 py-1 rounded' onClick={signOut}>Sign out</button> : null}</header><main className='p-4 space-y-4'>{!isLoggedIn ? <div className='card max-w-md'><h2 className='font-semibold mb-2'>Sign in / Sign up</h2><input className='w-full border p-2 rounded mb-2' value={email} placeholder='Email' onChange={(e) => setEmail(e.target.value)} /><input className='w-full border p-2 rounded mb-2' type='password' value={password} placeholder='Password' onChange={(e) => setPassword(e.target.value)} /><div className='flex gap-2'><button className='border px-3 py-1 rounded' onClick={signIn}>Sign in</button><button className='border px-3 py-1 rounded' onClick={signUp}>Sign up</button></div>{authError ? <p className='text-red-700 mt-2 text-sm'>{authError}</p> : null}</div> : null}
+      <Routes>
+        <Route path='/' element={<Navigate to={isLoggedIn ? (profile ? routeAfterProfile(profile) : '/pending-approval') : '/'} replace />} />
+        <Route path='/pending-approval' element={<PendingApprovalPage />} />
+        <Route path='/denied' element={<DeniedAccountPage />} />
+        <Route path='/dashboard' element={<DashboardPage />} />
+        <Route path='/create' element={<CreateReportPage />} />
+        <Route path='/admin' element={<AdminPage />} />
+        <Route path='/settings' element={<SettingsPage />} />
+      </Routes>
+    </main></div>;
+}
