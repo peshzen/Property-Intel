@@ -22,8 +22,6 @@ export async function callNetlifyFunction<T>(name: string, body?: Record<string,
 }
 
 export async function callAuthedFunction<T>(name: string, body?: Record<string, unknown>): Promise<T> {
-  const token = await getOptionalToken();
-export async function callAuthedFunction<T>(name: string, body?: Record<string, unknown>): Promise<T> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new Error('Not authenticated.');
