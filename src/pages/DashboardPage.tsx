@@ -1,0 +1,1 @@
+export function DashboardPage(){return <div className='space-y-4'><h1 className='text-xl font-semibold'>Reports Dashboard</h1><div className='card'>Search, filter, card/table toggles, and saved report list hooks are scaffolded for Supabase data.</div></div>}
