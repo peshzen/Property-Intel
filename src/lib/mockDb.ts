@@ -105,5 +105,12 @@ export const db = {
   getReport(id: string) { return read<AppReport[]>(REPORTS_KEY, []).find((r) => r.id === id) ?? null; },
   updateReport(report: AppReport) {
     write(REPORTS_KEY, read<AppReport[]>(REPORTS_KEY, []).map((r) => (r.id === report.id ? report : r)));
+  },
+  deleteReport(reportId: string, actor: AppUser) {
+    const reports = read<AppReport[]>(REPORTS_KEY, []);
+    const target = reports.find((r) => r.id === reportId);
+    if (!target) return;
+    if (actor.role !== 'admin' && target.userId !== actor.id) throw new Error('Unauthorized delete attempt.');
+    write(REPORTS_KEY, reports.filter((r) => r.id !== reportId));
   }
 };
