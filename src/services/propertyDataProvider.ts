@@ -1,5 +1,8 @@
-import { PropertyFacts } from '../types';
-export async function getPropertyFacts(_address:string):Promise<PropertyFacts>{
-  // TODO: Replace with official provider adapter (ATTOM/RENTCAST/etc.) through serverless function.
-  return { beds:3,baths:2,squareFeet:1650,lotSize:7200,yearBuilt:1994,propertyType:'Single Family',lastSaleDate:'2021-06-01',lastSalePrice:315000 };
+import type { PropertyFacts } from '../types';
+import { geocodeAddress } from './geocodingProvider';
+import { fetchProperty } from './propertyProvider';
+
+export async function getPropertyFacts(address: string): Promise<PropertyFacts> {
+  const geo = await geocodeAddress(address);
+  return fetchProperty(geo);
 }

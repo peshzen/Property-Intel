@@ -1,4 +1,14 @@
-export async function getPublicRecordsChecks(){
-  // TODO: Use county/town official datasets and paid APIs via secure backend functions.
-  return { lien_data:{status:'No obvious liens found'}, tax_data:{status:'Current'}, mortgage_data:{status:'Active mortgage recorded'}, foreclosure_data:{status:'No foreclosure filings found'}, water_sewer_data:{status:'No open balances found'} };
+import type { GeocodeResult, PublicRecordSummary } from '../types';
+
+export async function fetchPublicRecords(geocode: GeocodeResult): Promise<PublicRecordSummary> {
+  const response = await fetch('/.netlify/functions/fetch-public-records', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ geocode }),
+  });
+  if (!response.ok) throw new Error('Failed to fetch public records');
+  return response.json();
+}
+
+export async function getPublicRecordsChecks() {
+  return fetchPublicRecords({ normalizedAddress: '', city: '', county: '', state: '', zip: '', latitude: 0, longitude: 0 });
 }
