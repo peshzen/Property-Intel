@@ -1,11 +1,15 @@
 import type { GeocodeResult } from '../types';
+import { callNetlifyFunction } from './netlifyClient';
 
 export async function geocodeAddress(address: string): Promise<GeocodeResult> {
-  const response = await fetch('/.netlify/functions/generate-report', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode: 'geocode', address }),
-  });
-  if (!response.ok) throw new Error('Failed to geocode address');
-  return response.json();
+  const data = await callNetlifyFunction<{ formatted_address: string; lat: number; lng: number; city: string; county: string; state: string; zip: string }>('geocode-address', { address });
+  return {
+    normalizedAddress: data.formatted_address,
+    city: data.city,
+    county: data.county,
+    state: data.state,
+    zip: data.zip,
+    latitude: data.lat,
+    longitude: data.lng,
+  };
 }
