@@ -107,6 +107,7 @@ export function SettingsPage(){
     </div>
     {message && <p className='text-sm'>{message}</p>}
     {keyStatus === 'connection_failed' && <p className='text-xs text-slate-500'>Connection failed. Check billing, enabled APIs, API restrictions, and allowed referrers/IPs.</p>}
+    {keyStatus !== 'not_connected' && <p className='text-xs text-slate-500'>Connection failed. Check billing, enabled APIs, API restrictions, and allowed referrers/IPs.</p>}
   </div>
   {debug?.isAdmin && <div className='card p-4 space-y-1 text-xs'>
     <h3 className='font-semibold text-sm'>Google Maps Diagnostics (Admin)</h3>
