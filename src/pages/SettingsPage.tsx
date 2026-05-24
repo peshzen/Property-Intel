@@ -1,0 +1,1 @@
+export function SettingsPage(){return <div className='space-y-4'><h1 className='text-xl font-semibold'>Profile & Settings</h1><div className='card'>Profile edit, comp radius default, Google Maps API key storage and theme toggle live here.</div></div>}

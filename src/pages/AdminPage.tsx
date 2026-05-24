@@ -1,0 +1,1 @@
+export function AdminPage(){return <div className='space-y-4'><h1 className='text-xl font-semibold'>Admin Dashboard</h1><div className='card'>Pending users, approve/deny actions, all reports by user/city/county/date, and audit logs are backed by SQL/RLS policies.</div></div>}

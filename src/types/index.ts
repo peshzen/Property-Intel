@@ -1,0 +1,5 @@
+export type Role='user'|'admin'; export type ApprovalStatus='pending'|'approved'|'denied';
+export interface Profile{ id:string;email:string;full_name:string|null;phone:string|null;company:string|null;role:Role;approval_status:ApprovalStatus;default_comp_radius_miles:number;google_maps_api_key_encrypted:string|null; }
+export interface PropertyFacts{beds:number;baths:number;squareFeet:number;lotSize:number;yearBuilt:number;propertyType:string;lastSaleDate:string;lastSalePrice:number;}
+export interface Comp{id:string;address:string;distanceMiles:number;beds:number;baths:number;squareFeet:number;soldPrice:number;soldDate:string;yearBuilt:number;imageUrl?:string;source:string;adjustments?:Record<string,number>;}
+export interface Report{ id:string;user_id:string;address:string;city:string;county:string;state:string;zip:string;latitude:number;longitude:number;main_image_url:string|null;property_images:string[];zillow_estimate:number|null;realtor_estimate:number|null;estimated_arv:number|null;upset_price:number|null;star_rating:number|null;report_data:any;custom_fields:any[];share_token:string|null;created_at:string;}
