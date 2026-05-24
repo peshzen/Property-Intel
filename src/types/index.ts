@@ -11,6 +11,8 @@ export interface Profile {
   approval_status: ApprovalStatus;
   default_comp_radius_miles: number;
   google_maps_api_key_encrypted: string | null;
+  google_maps_api_key_status?: 'not_connected' | 'connected' | 'connection_failed' | null;
+  google_maps_api_key_last_tested_at?: string | null;
 }
 
 export interface GeocodeResult {
