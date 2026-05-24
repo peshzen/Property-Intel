@@ -28,6 +28,14 @@ Production-minded MVP for investor comparable reports using React + Vite + TypeS
 - `GOOGLE_API_KEY_ENCRYPTION_SECRET` (**recommended**) - Encrypts/decrypts user-saved Google keys.
 - `VITE_GOOGLE_MAPS_API_KEY` (**optional frontend-only**) - Only needed if you render Google Maps JavaScript directly in browser.
 
+
+## API key safety (important)
+- Never hardcode Google or provider API keys in frontend code, committed config, or function source files.
+- Put secrets in `.env` for local dev and Netlify environment variables for deployed functions.
+- Treat anything with the `VITE_` prefix as public/client-visible; do not place private keys there.
+- If a key is accidentally exposed, rotate/revoke it immediately in Google Cloud Console and redeploy.
+- Apply key restrictions in Google Cloud (API restrictions + HTTP referrer/IP restrictions as appropriate).
+
 ## Supabase
 - Run migrations in `supabase/migrations`.
 - Optional seed: `supabase/seed/demo_seed.sql`.
