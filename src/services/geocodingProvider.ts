@@ -1,5 +1,11 @@
-export interface GeocodeResult { normalizedAddress:string; city:string; county:string; state:string; zip:string; latitude:number; longitude:number; }
-export async function geocodeAddress(address:string):Promise<GeocodeResult>{
-  // TODO: Connect official geocoding API via Netlify function.
-  return { normalizedAddress:address.trim(), city:'Austin', county:'Travis', state:'TX', zip:'78701', latitude:30.2672, longitude:-97.7431 };
+import type { GeocodeResult } from '../types';
+
+export async function geocodeAddress(address: string): Promise<GeocodeResult> {
+  const response = await fetch('/.netlify/functions/generate-report', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode: 'geocode', address }),
+  });
+  if (!response.ok) throw new Error('Failed to geocode address');
+  return response.json();
 }
