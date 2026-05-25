@@ -96,35 +96,40 @@ export function App() {
   const [authLoading, setAuthLoading] = useState(true);
   useEffect(() => {
     seed();
-    const init = async () => {
-      try {
-      const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        const p = await loadProfile().catch(() => null);
-        if (p) {
-          setUser({ id: p.id, email: p.email, password: '', fullName: p.full_name ?? p.email, role: p.role, approvalStatus: p.approval_status, createdAt: new Date().toISOString() });
-          return;
-        }
-      }
-    } catch {
-      // Supabase unavailable: fall back to local mock session.
-    }
-      setUser(db.session());
-    };
-    init().finally(() => setAuthLoading(false));
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!session) {
+    const syncUserFromSession = async (sessionExists: boolean) => {
+      if (!sessionExists) {
         setUser(db.session());
-        setAuthLoading(false);
         return;
       }
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        const p = await loadProfile().catch(() => null);
-        if (p) {
-          setUser({ id: p.id, email: p.email, password: '', fullName: p.full_name ?? p.email, role: p.role, approvalStatus: p.approval_status, createdAt: new Date().toISOString() });
-          setAuthLoading(false);
-        }
+
+      const p = await loadProfile().catch(() => null);
+      if (p) {
+        setUser({ id: p.id, email: p.email, password: '', fullName: p.full_name ?? p.email, role: p.role, approvalStatus: p.approval_status, createdAt: new Date().toISOString() });
+        return;
+      }
+
+      // Authenticated but missing profile row (common after OAuth if trigger/migration failed).
+      setUser(null);
+    };
+
+    const init = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        await syncUserFromSession(Boolean(data.session));
+      } catch {
+        // Supabase unavailable: fall back to local mock session.
+        setUser(db.session());
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+    init();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED' || event === 'SIGNED_OUT') {
+        await syncUserFromSession(Boolean(session));
+        setAuthLoading(false);
       }
     });
     const savedTheme = localStorage.getItem('pi_theme');
