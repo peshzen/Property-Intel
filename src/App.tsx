@@ -17,7 +17,7 @@ import {
   Sun,
   User,
 } from 'lucide-react';
-import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { db, seed, type AppAuditLog, type AppReport, type AppUser } from './lib/mockDb';
 import { geocodeAddress } from './services/geocodingProvider';
 import { getPropertyFacts } from './services/propertyDataProvider';
@@ -43,16 +43,19 @@ const navItems: NavItem[] = [
 ];
 
 function Guard({ user, authLoading, children }: { user: AppUser | null; authLoading: boolean; children: React.ReactElement }) {
+  console.debug('[auth] guard decision', { authLoading, hasUser: Boolean(user) });
   if (authLoading) return <div className='p-6 text-sm text-muted'>Checking your session...</div>;
   return user ? children : <Navigate to='/login' replace />;
 }
 function ApprovedGuard({ user, authLoading, children }: { user: AppUser | null; authLoading: boolean; children: React.ReactElement }) {
+  console.debug('[auth] approved guard decision', { authLoading, hasUser: Boolean(user), approvalStatus: user?.approvalStatus ?? null });
   if (authLoading) return <div className='p-6 text-sm text-muted'>Checking your session...</div>;
   if (!user) return <Navigate to='/login' replace />;
   if (user.approvalStatus !== 'approved') return <Navigate to='/pending' replace />;
   return children;
 }
 function AdminGuard({ user, authLoading, children }: { user: AppUser | null; authLoading: boolean; children: React.ReactElement }) {
+  console.debug('[auth] admin guard decision', { authLoading, hasUser: Boolean(user), role: user?.role ?? null, approvalStatus: user?.approvalStatus ?? null });
   if (authLoading) return <div className='p-6 text-sm text-muted'>Checking your session...</div>;
   if (!user) return <Navigate to='/login' replace />;
   if (user.role !== 'admin' || user.approvalStatus !== 'approved') return <Navigate to='/' replace />;
@@ -127,10 +130,10 @@ export function App() {
     const init = async () => {
       try {
         const { data } = await withTimeout(supabase.auth.getSession(), { data: { session: null }, error: null });
+        console.debug('[auth] app load getSession result', { hasSession: Boolean(data.session), userId: data.session?.user?.id ?? null });
         await syncUserFromSession(Boolean(data.session));
       } catch {
-        // Supabase unavailable: fall back to local mock session.
-        setUser(db.session());
+        setUser(null);
       } finally {
         setAuthLoading(false);
       }
@@ -138,6 +141,7 @@ export function App() {
     init();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.debug('[auth] onAuthStateChange', { event, hasSession: Boolean(session), userId: session?.user?.id ?? null });
       if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED' || event === 'SIGNED_OUT') {
         await syncUserFromSession(Boolean(session));
         setAuthLoading(false);
@@ -155,7 +159,32 @@ export function App() {
 }
 
 function AppRoutes({ user, setUser, authLoading }: { user: AppUser | null; setUser: (u: AppUser) => void; authLoading: boolean }) {
-  return <Routes><Route path='/login' element={<Login onLogin={setUser} user={user} authLoading={authLoading} />} /><Route path='/signup' element={<SignUp />} /><Route path='/pending' element={<Pending />} /><Route path='/' element={<Guard user={user} authLoading={authLoading}><Dashboard user={user!} /></Guard>} /><Route path='/create' element={<ApprovedGuard user={user} authLoading={authLoading}><Create user={user!} /></ApprovedGuard>} /><Route path='/admin' element={<AdminGuard user={user} authLoading={authLoading}><Admin user={user!} /></AdminGuard>} /><Route path='/settings' element={<Guard user={user} authLoading={authLoading}><UserSettingsPage /></Guard>} /><Route path='/reports/:id' element={<ApprovedGuard user={user} authLoading={authLoading}><ReportDetail user={user!} /></ApprovedGuard>} /><Route path='*' element={<Landing />} /></Routes>;
+  return <Routes><Route path='/login' element={<Login onLogin={setUser} user={user} authLoading={authLoading} />} /><Route path='/signup' element={<SignUp />} /><Route path='/pending' element={<Pending />} /><Route path='/auth/callback' element={<AuthCallback />} /><Route path='/' element={<Guard user={user} authLoading={authLoading}><Dashboard user={user!} /></Guard>} /><Route path='/create' element={<ApprovedGuard user={user} authLoading={authLoading}><Create user={user!} /></ApprovedGuard>} /><Route path='/admin' element={<AdminGuard user={user} authLoading={authLoading}><Admin user={user!} /></AdminGuard>} /><Route path='/settings' element={<Guard user={user} authLoading={authLoading}><UserSettingsPage /></Guard>} /><Route path='/reports/:id' element={<ApprovedGuard user={user} authLoading={authLoading}><ReportDetail user={user!} /></ApprovedGuard>} /><Route path='*' element={<Landing />} /></Routes>;
+}
+
+function AuthCallback() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    const handleCallback = async () => {
+      try {
+        const hasSession = await waitForAuthenticatedSession();
+        const { data, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!hasSession || !data.session) throw new Error('OAuth callback completed but no authenticated session was found.');
+        if (active) navigate('/', { replace: true });
+      } catch (e) {
+        if (active) setError((e as Error).message);
+      }
+    };
+    console.debug('[auth] oauth callback route loaded', { url: `${window.location.origin}${location.pathname}${location.search}${location.hash}` });
+    handleCallback();
+    return () => { active = false; };
+  }, [navigate, location.pathname, location.search, location.hash]);
+  if (error) return <AuthScaffold title='Sign-in failed' subtitle='We could not finish your Google sign-in.'><p className='text-sm text-rose-400'>{error}</p><Link className='btn-primary mt-3 inline-flex' to='/login'>Back to login</Link></AuthScaffold>;
+  return <AuthScaffold title='Finishing sign-in' subtitle='Please wait while we complete your authentication.'><p className='text-sm text-muted'>Checking your session...</p></AuthScaffold>;
 }
 
 
@@ -172,9 +201,11 @@ function Login({ onLogin, user, authLoading }: { onLogin: (u: AppUser) => void; 
   const loginWithGoogle = async () => {
     setError('');
     try {
+      const redirectTo = `${window.location.origin}/auth/callback`;
+      console.debug('[auth] oauth redirect start URL', { redirectTo });
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: `${window.location.origin}/` },
+        options: { redirectTo },
       });
       if (oauthError) throw oauthError;
     } catch (e) {
@@ -184,7 +215,10 @@ function Login({ onLogin, user, authLoading }: { onLogin: (u: AppUser) => void; 
   };
   return <AuthScaffold title='Welcome back' subtitle='Access your investor workspace'><div className='space-y-3'><input className='input' placeholder='Email' value={email} onChange={(e) => setEmail(e.target.value)} /><input type='password' className='input' placeholder='Password' value={password} onChange={(e) => setPassword(e.target.value)} /><button className='btn-primary w-full' onClick={async () => { try {
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    console.debug('[auth] email login result', { hasError: Boolean(authError), message: authError?.message ?? null });
     if (authError) throw authError;
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) throw new Error('No active session after email/password sign-in.');
     let p = await loadProfile();
     if (!p) {
       // Match the session bootstrap behavior: self-heal missing profile rows.
@@ -196,17 +230,6 @@ function Login({ onLogin, user, authLoading }: { onLogin: (u: AppUser) => void; 
     onLogin(u);
     nav(u.approvalStatus === 'approved' ? '/' : '/pending');
   } catch (e) {
-    if (isNetworkFetchError(e)) {
-      try {
-        const localUser = db.login(email, password);
-        onLogin(localUser);
-        nav(localUser.approvalStatus === 'approved' ? '/' : '/pending');
-        return;
-      } catch (localErr) {
-        setError((localErr as Error).message);
-        return;
-      }
-    }
     setError((e as Error).message);
   } }}>Login</button><button className='btn-ghost w-full' onClick={loginWithGoogle}>Continue with Google</button><Link className='text-sm text-brand hover:underline' to='/signup'>Create account</Link>{error && <p className='text-sm text-rose-400'>{error}</p>}</div></AuthScaffold>; }
 function SignUp() { const nav = useNavigate(); const [fullName, setName] = useState(''); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
