@@ -185,13 +185,9 @@ function Login({ onLogin, user, authLoading }: { onLogin: (u: AppUser) => void; 
   return <AuthScaffold title='Welcome back' subtitle='Access your investor workspace'><div className='space-y-3'><input className='input' placeholder='Email' value={email} onChange={(e) => setEmail(e.target.value)} /><input type='password' className='input' placeholder='Password' value={password} onChange={(e) => setPassword(e.target.value)} /><button className='btn-primary w-full' onClick={async () => { try {
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
     if (authError) throw authError;
-
-    const hasSession = await waitForAuthenticatedSession();
-    if (!hasSession) throw new Error('Authentication session not ready. Please try again.');
-
     let p = await loadProfile();
     if (!p) {
-      // Match bootstrap behavior: self-heal missing profile rows.
+      // Match the session bootstrap behavior: self-heal missing profile rows.
       p = await ensureProfileForCurrentUser();
     }
     if (!p) throw new Error('Profile not found.');
