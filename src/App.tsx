@@ -128,6 +128,19 @@ const isNetworkFetchError = (err: unknown) => {
 
 const AuthScaffold = ({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) => <div className='relative flex min-h-screen items-center justify-center overflow-hidden bg-app p-6'><div className='absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,.25),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(14,165,233,.2),transparent_35%)]' /><div className='card-premium relative w-full max-w-md'><h1 className='text-2xl font-semibold'>{title}</h1><p className='mt-1 text-sm text-muted'>{subtitle}</p><div className='mt-6'>{children}</div></div></div>;
 function Login({ onLogin }: { onLogin: (u: AppUser) => void }) { const nav = useNavigate(); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
+  const loginWithGoogle = async () => {
+    setError('');
+    try {
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/login` },
+      });
+      if (oauthError) throw oauthError;
+    } catch (e) {
+      console.error('Google OAuth sign-in failed', e);
+      setError((e as Error).message || 'Unable to continue with Google. Please try again.');
+    }
+  };
   return <AuthScaffold title='Welcome back' subtitle='Access your investor workspace'><div className='space-y-3'><input className='input' placeholder='Email' value={email} onChange={(e) => setEmail(e.target.value)} /><input type='password' className='input' placeholder='Password' value={password} onChange={(e) => setPassword(e.target.value)} /><button className='btn-primary w-full' onClick={async () => { try {
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
     if (authError) throw authError;
@@ -149,7 +162,7 @@ function Login({ onLogin }: { onLogin: (u: AppUser) => void }) { const nav = use
       }
     }
     setError((e as Error).message);
-  } }}>Login</button><button className='btn-ghost w-full'>Continue with Google</button><Link className='text-sm text-brand hover:underline' to='/signup'>Create account</Link>{error && <p className='text-sm text-rose-400'>{error}</p>}</div></AuthScaffold>; }
+  } }}>Login</button><button className='btn-ghost w-full' onClick={loginWithGoogle}>Continue with Google</button><Link className='text-sm text-brand hover:underline' to='/signup'>Create account</Link>{error && <p className='text-sm text-rose-400'>{error}</p>}</div></AuthScaffold>; }
 function SignUp() { const nav = useNavigate(); const [fullName, setName] = useState(''); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
   return <AuthScaffold title='Create investor account' subtitle='Start analyzing opportunities faster'><div className='space-y-3'><input className='input' placeholder='Full name' value={fullName} onChange={(e) => setName(e.target.value)} /><input className='input' placeholder='Email' value={email} onChange={(e) => setEmail(e.target.value)} /><input type='password' className='input' placeholder='Password' value={password} onChange={(e) => setPassword(e.target.value)} /><button className='btn-primary w-full' onClick={async () => { try { const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName } } }); if (error) throw error; nav('/login'); } catch (e) { if (isNetworkFetchError(e)) { try { db.signUp(email, password, fullName); nav('/login'); return; } catch (localErr) { setError((localErr as Error).message); return; } } setError((e as Error).message); } }}>Create account</button>{error && <p className='text-sm text-rose-400'>{error}</p>}</div></AuthScaffold>; }
 function Pending() { return <AuthScaffold title='Approval in progress' subtitle='Your workspace unlocks once an admin approves'><Link to='/login' className='btn-primary inline-flex'>Back to login</Link></AuthScaffold>; }
