@@ -28,7 +28,7 @@ import { exportReportPdf } from './services/pdfService';
 import { createShareToken, shareUrl } from './services/shareService';
 import { SettingsPage as UserSettingsPage } from './pages/SettingsPage';
 import { supabase } from './lib/supabase';
-import { ensureProfileForCurrentUser, loadProfile } from './lib/db';
+import { ensureProfileForCurrentUser, loadProfile, waitForAuthenticatedSession } from './lib/db';
 
 type NavItem = { label: string; to: string; icon: React.ComponentType<{ className?: string }>; admin?: boolean };
 const navItems: NavItem[] = [
@@ -191,6 +191,7 @@ function Login({ onLogin, user, authLoading }: { onLogin: (u: AppUser) => void; 
       p = await ensureProfileForCurrentUser();
     }
     if (!p) throw new Error('Profile not found.');
+
     const u: AppUser = { id: p.id, email: p.email, password: '', fullName: p.full_name ?? p.email, role: p.role, approvalStatus: p.approval_status, createdAt: new Date().toISOString() };
     onLogin(u);
     nav(u.approvalStatus === 'approved' ? '/' : '/pending');

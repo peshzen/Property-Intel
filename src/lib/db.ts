@@ -1,6 +1,16 @@
 import { supabase } from './supabase';
 import type { Comp, Profile, Report } from '../types';
 
+export async function waitForAuthenticatedSession(attempts = 8, delayMs = 150) {
+  for (let i = 0; i < attempts; i += 1) {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    if (data.session) return true;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return false;
+}
+
 export async function getCurrentUserId() {
   const { data, error } = await supabase.auth.getUser();
   if (error) throw error;
