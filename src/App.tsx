@@ -185,8 +185,28 @@ function Login({ onLogin, user, authLoading }: { onLogin: (u: AppUser) => void; 
   return <AuthScaffold title='Welcome back' subtitle='Access your investor workspace'><div className='space-y-3'><input className='input' placeholder='Email' value={email} onChange={(e) => setEmail(e.target.value)} /><input type='password' className='input' placeholder='Password' value={password} onChange={(e) => setPassword(e.target.value)} /><button className='btn-primary w-full' onClick={async () => { try {
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
     if (authError) throw authError;
+
+    const waitForSession = async (attempts = 8, delayMs = 150) => {
+      for (let i = 0; i < attempts; i += 1) {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) return true;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+      return false;
+    };
+
+    const hasSession = await waitForSession();
+    if (!hasSession) throw new Error('Authentication session not ready. Please try again.');
+
     const p = await loadProfile();
-    if (!p) throw new Error('Profile not found.');
+    if (!p) {
+      const ensured = await ensureProfileForCurrentUser();
+      if (!ensured) throw new Error('Profile not found.');
+      const u: AppUser = { id: ensured.id, email: ensured.email, password: '', fullName: ensured.full_name ?? ensured.email, role: ensured.role, approvalStatus: ensured.approval_status, createdAt: new Date().toISOString() };
+      onLogin(u);
+      nav(u.approvalStatus === 'approved' ? '/' : '/pending');
+      return;
+    }
     const u: AppUser = { id: p.id, email: p.email, password: '', fullName: p.full_name ?? p.email, role: p.role, approvalStatus: p.approval_status, createdAt: new Date().toISOString() };
     onLogin(u);
     nav(u.approvalStatus === 'approved' ? '/' : '/pending');
