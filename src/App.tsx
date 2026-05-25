@@ -28,7 +28,7 @@ import { exportReportPdf } from './services/pdfService';
 import { createShareToken, shareUrl } from './services/shareService';
 import { SettingsPage as UserSettingsPage } from './pages/SettingsPage';
 import { supabase } from './lib/supabase';
-import { ensureProfileForCurrentUser, loadProfile } from './lib/db';
+import { ensureProfileForCurrentUser, loadProfile, waitForAuthenticatedSession } from './lib/db';
 
 type NavItem = { label: string; to: string; icon: React.ComponentType<{ className?: string }>; admin?: boolean };
 const navItems: NavItem[] = [
@@ -186,16 +186,7 @@ function Login({ onLogin, user, authLoading }: { onLogin: (u: AppUser) => void; 
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
     if (authError) throw authError;
 
-    const waitForSession = async (attempts = 8, delayMs = 150) => {
-      for (let i = 0; i < attempts; i += 1) {
-        const { data } = await supabase.auth.getSession();
-        if (data.session) return true;
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-      return false;
-    };
-
-    const hasSession = await waitForSession();
+    const hasSession = await waitForAuthenticatedSession();
     if (!hasSession) throw new Error('Authentication session not ready. Please try again.');
 
     const p = await loadProfile();
