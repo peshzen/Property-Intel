@@ -15,6 +15,23 @@ export async function loadProfile(): Promise<Profile | null> {
   return data;
 }
 
+export async function ensureProfileForCurrentUser() {
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+  const authUser = authData.user;
+  if (!authUser) return null;
+
+  const fullName = (authUser.user_metadata?.full_name as string | undefined) ?? authUser.email ?? '';
+  const { error } = await supabase.from('profiles').upsert({
+    id: authUser.id,
+    email: authUser.email ?? '',
+    full_name: fullName,
+  });
+  if (error) throw error;
+
+  return loadProfile();
+}
+
 export async function updateProfile(patch: Partial<Profile>) {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('Not authenticated');
