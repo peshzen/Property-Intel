@@ -1,2 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
-export const supabase=createClient(import.meta.env.VITE_SUPABASE_URL ?? 'https://demo.supabase.co', import.meta.env.VITE_SUPABASE_ANON_KEY ?? 'demo-anon-key');
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Configure these in your environment (Netlify included).');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
