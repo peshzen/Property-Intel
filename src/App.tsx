@@ -42,15 +42,18 @@ const navItems: NavItem[] = [
   { label: 'Settings', to: '/settings', icon: Settings },
 ];
 
-function Guard({ user, children }: { user: AppUser | null; children: React.ReactElement }) {
+function Guard({ user, authLoading, children }: { user: AppUser | null; authLoading: boolean; children: React.ReactElement }) {
+  if (authLoading) return <div className='p-6 text-sm text-muted'>Checking your session...</div>;
   return user ? children : <Navigate to='/login' replace />;
 }
-function ApprovedGuard({ user, children }: { user: AppUser | null; children: React.ReactElement }) {
+function ApprovedGuard({ user, authLoading, children }: { user: AppUser | null; authLoading: boolean; children: React.ReactElement }) {
+  if (authLoading) return <div className='p-6 text-sm text-muted'>Checking your session...</div>;
   if (!user) return <Navigate to='/login' replace />;
   if (user.approvalStatus !== 'approved') return <Navigate to='/pending' replace />;
   return children;
 }
-function AdminGuard({ user, children }: { user: AppUser | null; children: React.ReactElement }) {
+function AdminGuard({ user, authLoading, children }: { user: AppUser | null; authLoading: boolean; children: React.ReactElement }) {
+  if (authLoading) return <div className='p-6 text-sm text-muted'>Checking your session...</div>;
   if (!user) return <Navigate to='/login' replace />;
   if (user.role !== 'admin' || user.approvalStatus !== 'approved') return <Navigate to='/' replace />;
   return children;
@@ -90,6 +93,7 @@ function Shell({ user, darkMode, setDarkMode, logout, children }: { user: AppUse
 export function App() {
   const [user, setUser] = useState<AppUser | null>(null);
   const [darkMode, setDarkMode] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
   useEffect(() => {
     seed();
     const init = async () => {
@@ -107,17 +111,35 @@ export function App() {
     }
       setUser(db.session());
     };
-    init();
+    init().finally(() => setAuthLoading(false));
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!session) {
+        setUser(db.session());
+        setAuthLoading(false);
+        return;
+      }
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        const p = await loadProfile().catch(() => null);
+        if (p) {
+          setUser({ id: p.id, email: p.email, password: '', fullName: p.full_name ?? p.email, role: p.role, approvalStatus: p.approval_status, createdAt: new Date().toISOString() });
+          setAuthLoading(false);
+        }
+      }
+    });
     const savedTheme = localStorage.getItem('pi_theme');
     setDarkMode(savedTheme ? savedTheme === 'dark' : true);
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
   useEffect(() => { document.documentElement.classList.toggle('dark', darkMode); localStorage.setItem('pi_theme', darkMode ? 'dark' : 'light'); }, [darkMode]);
   const logout = async () => { await supabase.auth.signOut(); db.logout(); setUser(null); };
-  return <div className='min-h-screen'>{user ? <Shell user={user} darkMode={darkMode} setDarkMode={setDarkMode} logout={logout}><AppRoutes user={user} setUser={setUser} /></Shell> : <AppRoutes user={user} setUser={setUser} />}</div>;
+  return <div className='min-h-screen'>{user ? <Shell user={user} darkMode={darkMode} setDarkMode={setDarkMode} logout={logout}><AppRoutes user={user} setUser={setUser} authLoading={authLoading} /></Shell> : <AppRoutes user={user} setUser={setUser} authLoading={authLoading} />}</div>;
 }
 
-function AppRoutes({ user, setUser }: { user: AppUser | null; setUser: (u: AppUser) => void }) {
-  return <Routes><Route path='/login' element={<Login onLogin={setUser} />} /><Route path='/signup' element={<SignUp />} /><Route path='/pending' element={<Pending />} /><Route path='/' element={<Guard user={user}><Dashboard user={user!} /></Guard>} /><Route path='/create' element={<ApprovedGuard user={user}><Create user={user!} /></ApprovedGuard>} /><Route path='/admin' element={<AdminGuard user={user}><Admin user={user!} /></AdminGuard>} /><Route path='/settings' element={<Guard user={user}><UserSettingsPage /></Guard>} /><Route path='/reports/:id' element={<ApprovedGuard user={user}><ReportDetail user={user!} /></ApprovedGuard>} /><Route path='*' element={<Landing />} /></Routes>;
+function AppRoutes({ user, setUser, authLoading }: { user: AppUser | null; setUser: (u: AppUser) => void; authLoading: boolean }) {
+  return <Routes><Route path='/login' element={<Login onLogin={setUser} user={user} authLoading={authLoading} />} /><Route path='/signup' element={<SignUp />} /><Route path='/pending' element={<Pending />} /><Route path='/' element={<Guard user={user} authLoading={authLoading}><Dashboard user={user!} /></Guard>} /><Route path='/create' element={<ApprovedGuard user={user} authLoading={authLoading}><Create user={user!} /></ApprovedGuard>} /><Route path='/admin' element={<AdminGuard user={user} authLoading={authLoading}><Admin user={user!} /></AdminGuard>} /><Route path='/settings' element={<Guard user={user} authLoading={authLoading}><UserSettingsPage /></Guard>} /><Route path='/reports/:id' element={<ApprovedGuard user={user} authLoading={authLoading}><ReportDetail user={user!} /></ApprovedGuard>} /><Route path='*' element={<Landing />} /></Routes>;
 }
 
 
@@ -127,13 +149,16 @@ const isNetworkFetchError = (err: unknown) => {
 };
 
 const AuthScaffold = ({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) => <div className='relative flex min-h-screen items-center justify-center overflow-hidden bg-app p-6'><div className='absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,.25),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(14,165,233,.2),transparent_35%)]' /><div className='card-premium relative w-full max-w-md'><h1 className='text-2xl font-semibold'>{title}</h1><p className='mt-1 text-sm text-muted'>{subtitle}</p><div className='mt-6'>{children}</div></div></div>;
-function Login({ onLogin }: { onLogin: (u: AppUser) => void }) { const nav = useNavigate(); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
+function Login({ onLogin, user, authLoading }: { onLogin: (u: AppUser) => void; user: AppUser | null; authLoading: boolean }) { const nav = useNavigate();
+  useEffect(() => {
+    if (!authLoading && user) nav(user.approvalStatus === 'approved' ? '/' : '/pending', { replace: true });
+  }, [authLoading, user, nav]); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
   const loginWithGoogle = async () => {
     setError('');
     try {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: `${window.location.origin}/login` },
+        options: { redirectTo: `${window.location.origin}/` },
       });
       if (oauthError) throw oauthError;
     } catch (e) {
