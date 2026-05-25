@@ -28,7 +28,7 @@ import { exportReportPdf } from './services/pdfService';
 import { createShareToken, shareUrl } from './services/shareService';
 import { SettingsPage as UserSettingsPage } from './pages/SettingsPage';
 import { supabase } from './lib/supabase';
-import { loadProfile } from './lib/db';
+import { ensureProfileForCurrentUser, loadProfile } from './lib/db';
 
 type NavItem = { label: string; to: string; icon: React.ComponentType<{ className?: string }>; admin?: boolean };
 const navItems: NavItem[] = [
@@ -94,6 +94,12 @@ export function App() {
   const [user, setUser] = useState<AppUser | null>(null);
   const [darkMode, setDarkMode] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const withTimeout = async <T,>(task: Promise<T>, fallback: T, timeoutMs = 8000): Promise<T> => {
+    return await Promise.race([
+      task,
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), timeoutMs)),
+    ]);
+  };
   useEffect(() => {
     seed();
 
@@ -103,19 +109,24 @@ export function App() {
         return;
       }
 
-      const p = await loadProfile().catch(() => null);
+      const p = await withTimeout(loadProfile(), null).catch(() => null);
       if (p) {
         setUser({ id: p.id, email: p.email, password: '', fullName: p.full_name ?? p.email, role: p.role, approvalStatus: p.approval_status, createdAt: new Date().toISOString() });
         return;
       }
 
       // Authenticated but missing profile row (common after OAuth if trigger/migration failed).
+      const ensured = await withTimeout(ensureProfileForCurrentUser(), null).catch(() => null);
+      if (ensured) {
+        setUser({ id: ensured.id, email: ensured.email, password: '', fullName: ensured.full_name ?? ensured.email, role: ensured.role, approvalStatus: ensured.approval_status, createdAt: new Date().toISOString() });
+        return;
+      }
       setUser(null);
     };
 
     const init = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
+        const { data } = await withTimeout(supabase.auth.getSession(), { data: { session: null }, error: null });
         await syncUserFromSession(Boolean(data.session));
       } catch {
         // Supabase unavailable: fall back to local mock session.
