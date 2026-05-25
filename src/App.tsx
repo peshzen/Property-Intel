@@ -159,7 +159,7 @@ export function App() {
 }
 
 function AppRoutes({ user, setUser, authLoading }: { user: AppUser | null; setUser: (u: AppUser) => void; authLoading: boolean }) {
-  return <Routes><Route path='/login' element={<Login onLogin={setUser} user={user} authLoading={authLoading} />} /><Route path='/signup' element={<SignUp />} /><Route path='/pending' element={<Pending />} /><Route path='/auth/callback' element={<AuthCallback />} /><Route path='/' element={<Guard user={user} authLoading={authLoading}><Dashboard user={user!} /></Guard>} /><Route path='/create' element={<ApprovedGuard user={user} authLoading={authLoading}><Create user={user!} /></ApprovedGuard>} /><Route path='/admin' element={<AdminGuard user={user} authLoading={authLoading}><Admin user={user!} /></AdminGuard>} /><Route path='/settings' element={<Guard user={user} authLoading={authLoading}><UserSettingsPage /></Guard>} /><Route path='/reports/:id' element={<ApprovedGuard user={user} authLoading={authLoading}><ReportDetail user={user!} /></ApprovedGuard>} /><Route path='*' element={<Landing />} /></Routes>;
+  return <Routes><Route path='/login' element={<Login onLogin={setUser} user={user} authLoading={authLoading} />} /><Route path='/signup' element={<SignUp />} /><Route path='/pending' element={<Pending />} /><Route path='/auth/callback' element={<AuthCallback />} /><Route path='/' element={<Guard user={user} authLoading={authLoading}><Dashboard user={user!} /></Guard>} /><Route path='/create' element={<ApprovedGuard user={user} authLoading={authLoading}><Create user={user!} /></ApprovedGuard>} /><Route path='/admin' element={<AdminGuard user={user} authLoading={authLoading}><Admin user={user!} /></AdminGuard>} /><Route path='/settings' element={<Guard user={user} authLoading={authLoading}><UserSettingsPage /></Guard>} /><Route path='/reports/:id' element={<ApprovedGuard user={user} authLoading={authLoading}><ReportDetail user={user!} /></ApprovedGuard>} /><Route path='/mradmin' element={<MrAdminPortal />} /><Route path='*' element={<Landing />} /></Routes>;
 }
 
 function AuthCallback() {
@@ -246,6 +246,90 @@ function Create({ user }: { user: AppUser }) { const nav = useNavigate(); const 
 function Admin({ user }: { user: AppUser }) { const [pendingUsers, setPendingUsers] = useState(() => db.listUsers().filter((u) => u.approvalStatus === 'pending')); const reports = db.listReports(user); const auditLogs = db.listAuditLogs();
   const setApproval = (targetUser: AppUser, status: 'approved' | 'denied') => { db.updateUser({ ...targetUser, approvalStatus: status }); db.addAuditLog({ adminUserId: user.id, action: status === 'approved' ? 'user_approved' : 'user_denied', targetUserId: targetUser.id, metadata: {} }); setPendingUsers(db.listUsers().filter((u) => u.approvalStatus === 'pending')); };
   return <div className='space-y-6'><h1 className='text-2xl font-semibold'>Admin Control Center</h1><div className='card overflow-x-auto'><table className='w-full text-sm'><thead><tr className='text-left text-muted'><th className='pb-3'>User</th><th>Status</th><th>Actions</th></tr></thead><tbody>{pendingUsers.map((u) => <tr key={u.id} className='border-t border-app'><td className='py-3'>{u.fullName}<p className='text-muted'>{u.email}</p></td><td><span className='badge'>{u.approvalStatus}</span></td><td className='space-x-2'><button className='btn-primary' onClick={() => setApproval(u, 'approved')}>Approve</button><button className='btn-ghost' onClick={() => setApproval(u, 'denied')}>Deny</button></td></tr>)}</tbody></table>{pendingUsers.length===0&&<p>No pending users.</p>}</div><div className='grid gap-4 lg:grid-cols-2'><div className='card'><h2 className='font-semibold'>Report analytics</h2><p className='mt-3 text-3xl font-bold'>{reports.length}</p></div><div className='card'><h2 className='font-semibold'>Recent activity</h2>{auditLogs.slice(0,4).map((log: AppAuditLog)=><p key={log.id} className='mt-2 text-sm text-muted'>{log.action} · {new Date(log.createdAt).toLocaleDateString()}</p>)}</div></div></div>; }
+
+
+const MRADMIN_USER = 'mradmin';
+const MRADMIN_PASSWORD = 'MrAdmin#2026!';
+const MRADMIN_SESSION_KEY = 'pi_mradmin_session';
+
+function MrAdminPortal() {
+  const [authenticated, setAuthenticated] = useState(() => localStorage.getItem(MRADMIN_SESSION_KEY) === 'true');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [users, setUsers] = useState<AppUser[]>(() => db.listUsers());
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+
+  const refreshUsers = () => setUsers(db.listUsers());
+  const handleAdminLogin = () => {
+    if (username === MRADMIN_USER && password === MRADMIN_PASSWORD) {
+      localStorage.setItem(MRADMIN_SESSION_KEY, 'true');
+      setAuthenticated(true);
+      setError('');
+      return;
+    }
+    setError('Invalid admin credentials.');
+  };
+
+  if (!authenticated) {
+    return <AuthScaffold title='MR Admin Login' subtitle='Administrative access for owner maintenance tasks'>
+      <div className='space-y-3'>
+        <input className='input' placeholder='Admin username' value={username} onChange={(e) => setUsername(e.target.value)} />
+        <input type='password' className='input' placeholder='Admin password' value={password} onChange={(e) => setPassword(e.target.value)} />
+        <button className='btn-primary w-full' onClick={handleAdminLogin}>Login to /mradmin</button>
+        {error && <p className='text-sm text-rose-400'>{error}</p>}
+      </div>
+    </AuthScaffold>;
+  }
+
+  return <div className='space-y-6'>
+    <div className='flex items-center gap-3'>
+      <h1 className='text-2xl font-semibold'>/mradmin · Owner Admin Maintenance</h1>
+      <button className='btn-ghost ml-auto' onClick={() => { localStorage.removeItem(MRADMIN_SESSION_KEY); setAuthenticated(false); }}>Log out</button>
+    </div>
+
+    <div className='card space-y-3'>
+      <h2 className='font-semibold'>Add user</h2>
+      <div className='grid gap-3 md:grid-cols-3'>
+        <input className='input' placeholder='Full name' value={newName} onChange={(e) => setNewName(e.target.value)} />
+        <input className='input' placeholder='Email' value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+        <input className='input' placeholder='Password' value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+      </div>
+      <button className='btn-primary' onClick={() => {
+        try {
+          const created = db.signUp(newEmail, newPassword, newName);
+          db.updateUser({ ...created, role: 'user', approvalStatus: 'approved' });
+          setNewName(''); setNewEmail(''); setNewPassword('');
+          refreshUsers();
+        } catch (e) {
+          setError((e as Error).message);
+        }
+      }}>Create user</button>
+      {error && <p className='text-sm text-rose-400'>{error}</p>}
+    </div>
+
+    <div className='card overflow-x-auto'>
+      <h2 className='mb-3 font-semibold'>Manage users</h2>
+      <table className='w-full text-sm'>
+        <thead><tr className='text-left text-muted'><th className='pb-2'>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          {users.map((u) => <tr key={u.id} className='border-t border-app'>
+            <td className='py-2'>{u.fullName}</td>
+            <td>{u.email}</td>
+            <td>{u.role}</td>
+            <td>{u.approvalStatus}</td>
+            <td className='space-x-2'>
+              <button className='btn-ghost' onClick={() => { db.updateUser({ ...u, role: u.role === 'admin' ? 'user' : 'admin' }); refreshUsers(); }}>Toggle role</button>
+              <button className='btn-ghost' onClick={() => { db.updateUser({ ...u, approvalStatus: u.approvalStatus === 'approved' ? 'denied' : 'approved' }); refreshUsers(); }}>Toggle status</button>
+            </td>
+          </tr>)}
+        </tbody>
+      </table>
+    </div>
+  </div>;
+}
 
 
 function ReportDetail({ user }: { user: AppUser }) { const { id = '' } = useParams(); const nav = useNavigate(); const [report, setReport] = useState<AppReport | null>(db.getReport(id)); const [k, setK] = useState(''); const [v, setV] = useState(''); if (!report) return <p>Report not found.</p>; if (user.role !== 'admin' && report.userId !== user.id) return <p>Unauthorized.</p>;
