@@ -189,15 +189,13 @@ function Login({ onLogin, user, authLoading }: { onLogin: (u: AppUser) => void; 
     const hasSession = await waitForAuthenticatedSession();
     if (!hasSession) throw new Error('Authentication session not ready. Please try again.');
 
-    const p = await loadProfile();
+    let p = await loadProfile();
     if (!p) {
-      const ensured = await ensureProfileForCurrentUser();
-      if (!ensured) throw new Error('Profile not found.');
-      const u: AppUser = { id: ensured.id, email: ensured.email, password: '', fullName: ensured.full_name ?? ensured.email, role: ensured.role, approvalStatus: ensured.approval_status, createdAt: new Date().toISOString() };
-      onLogin(u);
-      nav(u.approvalStatus === 'approved' ? '/' : '/pending');
-      return;
+      // Match bootstrap behavior: self-heal missing profile rows.
+      p = await ensureProfileForCurrentUser();
     }
+    if (!p) throw new Error('Profile not found.');
+
     const u: AppUser = { id: p.id, email: p.email, password: '', fullName: p.full_name ?? p.email, role: p.role, approvalStatus: p.approval_status, createdAt: new Date().toISOString() };
     onLogin(u);
     nav(u.approvalStatus === 'approved' ? '/' : '/pending');
