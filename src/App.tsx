@@ -159,7 +159,7 @@ export function App() {
 }
 
 function AppRoutes({ user, setUser, authLoading }: { user: AppUser | null; setUser: (u: AppUser) => void; authLoading: boolean }) {
-  return <Routes><Route path='/login' element={<Login onLogin={setUser} user={user} authLoading={authLoading} />} /><Route path='/signup' element={<SignUp />} /><Route path='/pending' element={<Pending />} /><Route path='/auth/callback' element={<AuthCallback />} /><Route path='/' element={<Guard user={user} authLoading={authLoading}><Dashboard user={user!} /></Guard>} /><Route path='/create' element={<ApprovedGuard user={user} authLoading={authLoading}><Create user={user!} /></ApprovedGuard>} /><Route path='/admin' element={<AdminGuard user={user} authLoading={authLoading}><Admin user={user!} /></AdminGuard>} /><Route path='/settings' element={<Guard user={user} authLoading={authLoading}><UserSettingsPage /></Guard>} /><Route path='/reports/:id' element={<ApprovedGuard user={user} authLoading={authLoading}><ReportDetail user={user!} /></ApprovedGuard>} /><Route path='/mradmin' element={<MrAdminPortal />} /><Route path='*' element={<Landing />} /></Routes>;
+  return <Routes><Route path='/login' element={<Login onLogin={setUser} user={user} authLoading={authLoading} />} /><Route path='/signup' element={<SignUp />} /><Route path='/pending' element={<Pending />} /><Route path='/auth/callback' element={<AuthCallback />} /><Route path='/' element={<Guard user={user} authLoading={authLoading}><Dashboard user={user!} /></Guard>} /><Route path='/create' element={<ApprovedGuard user={user} authLoading={authLoading}><Create user={user!} /></ApprovedGuard>} /><Route path='/admin' element={<AdminGuard user={user} authLoading={authLoading}><Admin user={user!} /></AdminGuard>} /><Route path='/settings' element={<Guard user={user} authLoading={authLoading}><UserSettingsPage /></Guard>} /><Route path='/reports/:id' element={<ApprovedGuard user={user} authLoading={authLoading}><ReportDetail user={user!} /></ApprovedGuard>} /><Route path='/mradmin' element={<MrAdminPortal />} /><Route path='/privacy-policy' element={<PrivacyPolicyPage />} /><Route path='*' element={<Landing />} /></Routes>;
 }
 
 function AuthCallback() {
@@ -235,7 +235,47 @@ function Login({ onLogin, user, authLoading }: { onLogin: (u: AppUser) => void; 
 function SignUp() { const nav = useNavigate(); const [fullName, setName] = useState(''); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState('');
   return <AuthScaffold title='Create investor account' subtitle='Start analyzing opportunities faster'><div className='space-y-3'><input className='input' placeholder='Full name' value={fullName} onChange={(e) => setName(e.target.value)} /><input className='input' placeholder='Email' value={email} onChange={(e) => setEmail(e.target.value)} /><input type='password' className='input' placeholder='Password' value={password} onChange={(e) => setPassword(e.target.value)} /><button className='btn-primary w-full' onClick={async () => { try { const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName } } }); if (error) throw error; nav('/login'); } catch (e) { if (isNetworkFetchError(e)) { try { db.signUp(email, password, fullName); nav('/login'); return; } catch (localErr) { setError((localErr as Error).message); return; } } setError((e as Error).message); } }}>Create account</button>{error && <p className='text-sm text-rose-400'>{error}</p>}</div></AuthScaffold>; }
 function Pending() { return <AuthScaffold title='Approval in progress' subtitle='Your workspace unlocks once an admin approves'><Link to='/login' className='btn-primary inline-flex'>Back to login</Link></AuthScaffold>; }
-function Landing() { return <div className='min-h-screen bg-app text-app'><section className='mx-auto max-w-7xl p-6 lg:p-12'><div className='card-premium grid gap-8 lg:grid-cols-2'><div><p className='badge mb-4'>Investor-grade intelligence</p><h1 className='text-4xl font-bold leading-tight'>Analyze Properties Like a Professional Investor</h1><p className='mt-4 text-muted'>Generate AI-powered comp reports, ARV estimates, and investor insights in seconds.</p><div className='mt-6 flex gap-3'><Link to='/signup' className='btn-primary'>Start free trial</Link><Link to='/login' className='btn-ghost'>Sign in</Link></div></div><div className='rounded-3xl border border-app bg-card p-5 hover-card'><div className='space-y-3'><div className='skeleton h-16' /><div className='grid grid-cols-2 gap-3'><div className='skeleton h-24' /><div className='skeleton h-24' /></div><div className='skeleton h-28' /></div></div></div></section></div>; }
+function Landing() {
+  return <div className='min-h-screen bg-app text-app'>
+    <section className='mx-auto max-w-7xl p-6 lg:p-12'>
+      <div className='card-premium grid gap-8 lg:grid-cols-2'>
+        <div>
+          <p className='badge mb-4'>Investor-grade intelligence</p>
+          <h1 className='text-4xl font-bold leading-tight'>Analyze Properties Like a Professional Investor</h1>
+          <p className='mt-4 text-muted'>Generate AI-powered comp reports, ARV estimates, and investor insights in seconds.</p>
+          <div className='mt-6 flex gap-3'><Link to='/signup' className='btn-primary'>Start free trial</Link><Link to='/login' className='btn-ghost'>Sign in</Link></div>
+        </div>
+        <div className='rounded-3xl border border-app bg-card p-5 hover-card'>
+          <div className='space-y-3'>
+            <div className='skeleton h-16' />
+            <div className='grid grid-cols-2 gap-3'><div className='skeleton h-24' /><div className='skeleton h-24' /></div>
+            <div className='skeleton h-28' />
+          </div>
+        </div>
+      </div>
+    </section>
+    <footer className='mx-auto max-w-7xl px-6 pb-10 text-sm text-muted lg:px-12'>We may share information in specific situations and with specific third parties. <Link to='/privacy-policy' className='text-brand hover:underline'>View our full privacy policy here</Link>.</footer>
+  </div>;
+}
+
+const privacyPolicyContent = `Chaveirim of Linden Logo
+Privacy Policy and Terms and Conditions
+This Privacy Notice for Chaverim Of Linden ("we," "us," or "our"), describes how and why we might access, collect, store, use, and/or share ("process") your personal information when you use our services ("Services"), including when you: Visit our website at chaveirimoflinden.org, or any website of ours that links to this Privacy Notice Engage with us in other related ways, including any sales, marketing, or events Questions or concerns? Reading this Privacy Notice will help you understand your privacy rights and choices. We are responsible for making decisions about how your personal information is processed. If you do not agree with our policies and practices, please do not use our Services. If you still have any questions or concerns, please contact us at info@chaveirimoflinden.org.
+SUMMARY OF KEY POINTS
+This summary provides key points from our Privacy Notice...
+12. HOW CAN YOU REVIEW, UPDATE, OR DELETE THE DATA WE COLLECT FROM YOU?
+Based on the applicable laws of your country or state of residence in the US, you may have the right to request access to the personal information we collect from you, details about how we have processed it, correct inaccuracies, or delete your personal information. You may also have the right to withdraw your consent to our processing of your personal information. These rights may be limited in some circumstances by applicable law. To request to review, update, or delete your personal information, please fill out and submit a data subject access request.
+
+© 2026 Chaveirim of Linden. All Rights Reserved.`;
+
+function PrivacyPolicyPage() {
+  return <div className='min-h-screen bg-app text-app'>
+    <section className='mx-auto max-w-5xl p-6 lg:p-12'>
+      <h1 className='text-3xl font-semibold'>Privacy Policy</h1>
+      <pre className='mt-6 whitespace-pre-wrap rounded-2xl border border-app bg-card p-5 text-sm leading-7'>{privacyPolicyContent}</pre>
+    </section>
+  </div>;
+}
 
 function Dashboard({ user }: { user: AppUser }) { const [q, setQ] = useState(''); const reports = useMemo(() => db.listReports(user).filter((r) => `${r.address} ${r.city}`.toLowerCase().includes(q.toLowerCase())), [user, q]);
   return <div className='space-y-6'><div className='flex flex-wrap items-center gap-3'><h1 className='text-2xl font-semibold'>Investor Dashboard</h1><input className='input ml-auto w-full max-w-sm' placeholder='Search address or city' value={q} onChange={(e) => setQ(e.target.value)} /></div><div className='grid gap-4 md:grid-cols-2 xl:grid-cols-4'>{['Total Reports','Average ARV','Favorites','Top Counties'].map((k, i) => <div key={k} className='card'><p className='text-sm text-muted'>{k}</p><p className='mt-2 text-2xl font-semibold'>{i===0?reports.length:i===1?`$${Math.round((reports.reduce((a,b)=>a+b.myArv,0)/Math.max(reports.length,1))/1000)}k`:i===2?reports.filter(r=>r.starRating>=4).length:'12'}</p></div>)}</div><div className='grid gap-4 xl:grid-cols-3'>{reports.map((r) => <Link key={r.id} to={`/reports/${r.id}`} className='card hover-card'><p className='text-sm text-muted'>{r.city}, {r.state}</p><h3 className='mt-1 font-semibold'>{r.address}</h3><div className='mt-4 flex items-center justify-between text-sm'><span>ARV ${r.myArv.toLocaleString()}</span><span className='badge'>⭐ {r.starRating}</span></div></Link>)}{reports.length===0&&<div className='card xl:col-span-3'>No reports found.</div>}</div></div>; }
