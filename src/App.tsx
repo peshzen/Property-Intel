@@ -159,7 +159,7 @@ export function App() {
 }
 
 function AppRoutes({ user, setUser, authLoading }: { user: AppUser | null; setUser: (u: AppUser) => void; authLoading: boolean }) {
-  return <Routes><Route path='/login' element={<Login onLogin={setUser} user={user} authLoading={authLoading} />} /><Route path='/signup' element={<SignUp />} /><Route path='/pending' element={<Pending />} /><Route path='/auth/callback' element={<AuthCallback />} /><Route path='/' element={<Guard user={user} authLoading={authLoading}><Dashboard user={user!} /></Guard>} /><Route path='/create' element={<ApprovedGuard user={user} authLoading={authLoading}><Create user={user!} /></ApprovedGuard>} /><Route path='/admin' element={<AdminGuard user={user} authLoading={authLoading}><Admin user={user!} /></AdminGuard>} /><Route path='/settings' element={<Guard user={user} authLoading={authLoading}><UserSettingsPage /></Guard>} /><Route path='/reports/:id' element={<ApprovedGuard user={user} authLoading={authLoading}><ReportDetail user={user!} /></ApprovedGuard>} /><Route path='/mradmin' element={<MrAdminPortal />} /><Route path='*' element={<Landing />} /></Routes>;
+  return <Routes><Route path='/login' element={<Login onLogin={setUser} user={user} authLoading={authLoading} />} /><Route path='/signup' element={<SignUp />} /><Route path='/pending' element={<Pending />} /><Route path='/auth/callback' element={<AuthCallback />} /><Route path='/' element={<Guard user={user} authLoading={authLoading}><Dashboard user={user!} /></Guard>} /><Route path='/create' element={<ApprovedGuard user={user} authLoading={authLoading}><Create user={user!} /></ApprovedGuard>} /><Route path='/admin' element={<AdminGuard user={user} authLoading={authLoading}><Admin user={user!} /></AdminGuard>} /><Route path='/settings' element={<Guard user={user} authLoading={authLoading}><UserSettingsPage /></Guard>} /><Route path='/reports/:id' element={<ApprovedGuard user={user} authLoading={authLoading}><ReportDetail user={user!} /></ApprovedGuard>} /><Route path='/mradmin' element={<MrAdminPortal />} /><Route path='/adminupload' element={<AdminUploadPage />} /><Route path='*' element={<Landing />} /></Routes>;
 }
 
 function AuthCallback() {
@@ -187,6 +187,36 @@ function AuthCallback() {
   return <AuthScaffold title='Finishing sign-in' subtitle='Please wait while we complete your authentication.'><p className='text-sm text-muted'>Checking your session...</p></AuthScaffold>;
 }
 
+
+
+const ADMIN_UPLOAD_MAX_BYTES = 10 * 1024 * 1024;
+
+function AdminUploadPage() {
+  const [file, setFile] = useState<File | null>(null);
+  const [message, setMessage] = useState('');
+
+  const onUpload = () => {
+    if (!file) {
+      setMessage('Please choose a file before uploading.');
+      return;
+    }
+    if (file.size > ADMIN_UPLOAD_MAX_BYTES) {
+      setMessage(`Upload blocked: file is ${(file.size / 1024 / 1024).toFixed(2)} MB; limit is 10 MB.`);
+      return;
+    }
+    setMessage(`Upload ready: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB) is within the 10 MB limit.`);
+  };
+
+  return <div className='space-y-4'>
+    <h1 className='text-2xl font-semibold'>Admin Upload</h1>
+    <div className='card space-y-3'>
+      <p className='text-sm text-muted'>Maximum file size: 10 MB.</p>
+      <input type='file' className='input' onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+      <button className='btn-primary' onClick={onUpload}>Upload</button>
+      {message && <p className='text-sm text-muted'>{message}</p>}
+    </div>
+  </div>;
+}
 
 const isNetworkFetchError = (err: unknown) => {
   const message = (err as Error | undefined)?.message?.toLowerCase() ?? '';
