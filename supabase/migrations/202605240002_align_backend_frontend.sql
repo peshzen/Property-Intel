@@ -141,7 +141,11 @@ begin
     for select using (auth.uid() = id or public.is_admin(auth.uid()));
 
   create policy profile_insert_self on public.profiles
-    for insert with check (auth.uid() = id);
+    for insert with check (
+      auth.uid() = id
+      and role = 'user'
+      and approval_status = 'pending'
+    );
 
   create policy profile_update_self on public.profiles
     for update using (auth.uid() = id)
